@@ -23,7 +23,7 @@ serde = { version = "1.0.102", features = ["derive"] }
 hex = "0.4.0"
 log = "0.4.8"
 env_logger = "0.7.1"
-sha2 = "0.8.0"
+sha2 = "0.8.2"
 sodiumoxide = "0.2.5"
 curv = { package="curv-kzen" , version="0.2.8", features = ["ec_secp256k1", "ecc"] }
 # the following crate should be pulled from the fork where its dependency on the `curv' library is upgraded
