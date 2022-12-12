@@ -1,4 +1,4 @@
-use anyhow::{anyhow, bail};
+use anyhow::{bail};
 use ecdsa_mpc::ecdsa::signature::{
     Phase1, SignedMessage
 };
@@ -18,7 +18,7 @@ use curv::elliptic::curves::traits::{ECScalar};
 use sha2::{Sha256, Digest};
 use curv::{BigInt, FE};
 
-use std::sync::{Arc, Mutex};
+
 use std::thread::JoinHandle;
 use std::{fs, env, thread, format};
 
