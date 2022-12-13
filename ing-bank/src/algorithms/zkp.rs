@@ -292,45 +292,77 @@ fn pair_of_safe_primes(bit_length: usize) -> PairOfSafePrimes {
     primes[index].to_owned()
 }
 
+struct MaliciousParams {
+    p: BigInt,
+    q: BigInt,
+    h1: BigInt,
+    h2: BigInt,
+    dlog_proof_h2_base_h1: DlogProof,
+    dlog_proof_h1_base_h2: DlogProof,
+}
+
+impl MaliciousParams {
+    fn default() -> Self {
+        Self {
+            p: BigInt::from_str_radix("57503", 10).unwrap(),
+            q: BigInt::from_str_radix("375537039890476009134774752756224403490785922991131114742832055644786973885332547776709846425153246935262229434906609991184199324734173711305563235056997580717702489072716231522176573527932040615510543818179433104746672292030081417890155856014113184759201262245290118494909761023827643514415411149126016086457585284691618918340762193181236779803919820257004591329671445144940577320140159427270970099113180754024171338657427159694995412696826733067889200534093854774315674550438438301567272957653619076912979616335930972310585729515284673037334577532469107439362765101550743914570323685040115658887309542130410547", 10).unwrap(),
+            h1: BigInt::from_str_radix("1337", 10).unwrap(),
+            h2: BigInt::from_str_radix("19651827378914501350258179241801120026015244814587085480319988631834435154056675004598092044214019285844091352575059608410705159551093183902929441405694868643640330475888529306439985092232791796501113580651332152239576534891002815975704667477633750481324363125290268295090990408307921327362855515059438642339057305591550632797898951370314847132275333238551775028865329909397642077213150812576323153134995234556133213124972784493428653945337108865534938116530236203393169758529947679749431048153727108656441380820542160887742004731458620908359076675473983494340466652386711349967483498552025579020575551621118342134200", 10).unwrap(),
+            dlog_proof_h2_base_h1: serde_json::from_str(r#"{"y": "ab0ef7a9fe582fb8430a3fe2e07678805f9aa105c87c167edb2f889c2f8303debf7620f591c89a62164751062e95b77c73877e947f14d700745a8e73f75b6237d8457869f58443062a3bfb2b53a59f4d6eb8f1265a2b2a4635326aba51f2f340bebb3c3549f2b08c60f1aef407d226a54d514f27c122b520be3c9e25280ceef6212f80609e3160a6732ded887bd96956d37eebf2b77b67f6cdd2b79ad1de6c3747e45a3a65abb3f7f2e805f0636d138d9c7ad688a58f9412674b13136ee2ad336435f0c278c8ff87ab1000da6cb3d7d83f2437f6bd661f83dd84b3d7dec28fb0b2678878e6a99214ce630be4944a8e582ab6fa466872bc62f64e1ecd851ceb69", "c": "862daaa2d6b5bbc62f377c8aedeac3dc1c7c36fc915a1b18cd3796eab86526ca"}"#).unwrap(),
+            dlog_proof_h1_base_h2: serde_json::from_str(r#"{"y": "ab0ef7a9fe582fb8430a3fe2e07678805f9aa105c87c167edb2f889c2f8303debf7620f591c89a62164751062e95b77c73877e947f14d700745a8e73f75b6237d8457869f58443062a3bfb2b53a59f4d6eb8f1265a2b2a4635326aba51f2f340bebb3c3549f2b08c60f1aef407d226a54d514f27c122b520be3c9e25280ceef6212f80609e3160a6732ded887bd96956d37eebf2b77b67f6cdd2b79ad1de6c3747e45a3a65abb3f7f2e805f0636d138d9c7ad688a58f9412674b13136ee2ad336435f0c278c8ff87ab1000da6cb3d7d83f2437f6bd661f83dd84b3d7dec3056b77e53cdb224ba2dc10379d635119402b3268ebd02e964795d5a30a1994f7977a", "c": "150c719000dab0482081e0604f24db9210ca6777f46627d1f23e950849958770"}"#).unwrap(),
+        }
+    }
+}
+
 #[trace(pretty, prefix = "ZkpSetup::", disable(zero))]
 impl ZkpSetup {
     /// Generates new zero knowledge range proof setup.
     /// Uses Fujisaki - Okamoto bit commitment scheme, "Statistical zero knowledge protocols to prove modular polynomial relations"
     pub fn random(group_order_bit_length: usize) -> Self {
-        use crate::algorithms::sample_generator_of_rsa_group;
-        let bit_length = group_order_bit_length / 2;
+        // use crate::algorithms::sample_generator_of_rsa_group;
+        // let bit_length = group_order_bit_length / 2;
+        //
+        // // Fujisaki-Okamoto commitment scheme setup
+        // let One = &BigInt::one();
+        // let mut primes = pair_of_safe_primes(bit_length);
+        // let b0 = loop {
+        //     let b0 = sample_generator_of_rsa_group(&primes.p, &primes.q);
+        //     if b0 != *One {
+        //         break b0;
+        //     }
+        // };
+        //
+        // let N_tilde = primes.p.borrow() * primes.q.borrow();
+        // let mut phi = (primes.p.borrow() - One) * (primes.q.borrow() - One);
+        // let alpha = loop {
+        //     let alpha = BigInt::strict_sample_range(&BigInt::from(1), &(phi.borrow() / 4));
+        //     if alpha.invert(&phi).is_some() {
+        //         break alpha;
+        //     }
+        // };
+        // phi.zeroize_bn();
+        // let b1 = b0.powm_sec(&alpha, &N_tilde);
+        //
+        // let result = Self {
+        //     p: primes.p.clone(),
+        //     q: primes.q.clone(),
+        //     alpha,
+        //     N_tilde,
+        //     h1: b0,
+        //     h2: b1,
+        // };
+        // primes.zeroize();
+        // result
 
-        // Fujisaki-Okamoto commitment scheme setup
-        let One = &BigInt::one();
-        let mut primes = pair_of_safe_primes(bit_length);
-        let b0 = loop {
-            let b0 = sample_generator_of_rsa_group(&primes.p, &primes.q);
-            if b0 != *One {
-                break b0;
-            }
-        };
-
-        let N_tilde = primes.p.borrow() * primes.q.borrow();
-        let mut phi = (primes.p.borrow() - One) * (primes.q.borrow() - One);
-        let alpha = loop {
-            let alpha = BigInt::strict_sample_range(&BigInt::from(1), &(phi.borrow() / 4));
-            if alpha.invert(&phi).is_some() {
-                break alpha;
-            }
-        };
-        phi.zeroize_bn();
-        let b1 = b0.powm_sec(&alpha, &N_tilde);
-
-        let result = Self {
-            p: primes.p.clone(),
-            q: primes.q.clone(),
-            alpha,
-            N_tilde,
-            h1: b0,
-            h2: b1,
-        };
-        primes.zeroize();
-        result
+        let params = MaliciousParams::default();
+        Self {
+            N_tilde: params.p.borrow() * params.q.borrow(),
+            p: params.p,
+            q: params.q,
+            alpha: BigInt::zero(),
+            h1: params.h1,
+            h2: params.h2,
+        }
     }
     #[cfg(test)]
     pub(crate) fn phi(&self) -> BigInt {
@@ -352,38 +384,52 @@ impl ZkpPublicSetup {
     ///  Creates new public setup and generates proof of knowledge of $` \alpha , \alpha^{-1} `$
     /// and proof of $` gcd(\tilde{N}, phi(\tilde{N} ) = 1 `$
     pub fn from_private_zkp_setup(setup: &ZkpSetup) -> Self {
-        let One = &BigInt::one();
-        let mut phi = (&setup.p - One) * (&setup.q - One);
-        let inv_alpha = &setup.alpha.invert(&phi).expect("alpha must be invertible"); // already checked in the constructor
-        let inv_n_tilde = setup
-            .N_tilde
-            .invert(&phi)
-            .expect("N-tilde must be invertible");
-        let n_tilde_proof = Self::n_proof(&setup.N_tilde, &setup.p, &setup.q, &inv_n_tilde);
-        let max_secret_length = phi.bit_length() as u32;
-        phi.zeroize_bn();
+        // let One = &BigInt::one();
+        // let mut phi = (&setup.p - One) * (&setup.q - One);
+        // let inv_alpha = &setup.alpha.invert(&phi).expect("alpha must be invertible"); // already checked in the constructor
+        // let inv_n_tilde = setup
+        //     .N_tilde
+        //     .invert(&phi)
+        //     .expect("N-tilde must be invertible");
+        // let n_tilde_proof = Self::n_proof(&setup.N_tilde, &setup.p, &setup.q, &inv_n_tilde);
+        // let max_secret_length = phi.bit_length() as u32;
+        // phi.zeroize_bn();
+        //
+        // Self {
+        //     N_tilde: setup.N_tilde.clone(),
+        //     h1: setup.h1.clone(),
+        //     h2: setup.h2.clone(),
+        //     dlog_proof: DlogProof::create(
+        //         &setup.N_tilde,
+        //         &setup.h1,
+        //         &setup.h2,
+        //         &setup.alpha,
+        //         max_secret_length,
+        //         Self::DLOG_PROOF_SECURITY_PARAMETER,
+        //     ),
+        //     inv_dlog_proof: DlogProof::create(
+        //         &setup.N_tilde,
+        //         &setup.h2,
+        //         &setup.h1,
+        //         &inv_alpha,
+        //         max_secret_length,
+        //         Self::DLOG_PROOF_SECURITY_PARAMETER,
+        //     ),
+        //     n_tilde_proof,
+        // }
 
+        let params = MaliciousParams::default();
+        let _1 = &BigInt::one();
+        let N_tilde = &params.p * &params.q;
+        let phi_N_tilde = (&params.p - _1) * (&params.q - _1);
+        let inv_N_tilde = (&N_tilde).invert(&phi_N_tilde).expect("N-tilde must be invertible");
         Self {
-            N_tilde: setup.N_tilde.clone(),
-            h1: setup.h1.clone(),
-            h2: setup.h2.clone(),
-            dlog_proof: DlogProof::create(
-                &setup.N_tilde,
-                &setup.h1,
-                &setup.h2,
-                &setup.alpha,
-                max_secret_length,
-                Self::DLOG_PROOF_SECURITY_PARAMETER,
-            ),
-            inv_dlog_proof: DlogProof::create(
-                &setup.N_tilde,
-                &setup.h2,
-                &setup.h1,
-                &inv_alpha,
-                max_secret_length,
-                Self::DLOG_PROOF_SECURITY_PARAMETER,
-            ),
-            n_tilde_proof,
+            n_tilde_proof: Self::n_proof(&N_tilde, &params.p, &params.q, &inv_N_tilde),
+            N_tilde,
+            h1: params.h1,
+            h2: params.h2,
+            dlog_proof: params.dlog_proof_h2_base_h1,
+            inv_dlog_proof: params.dlog_proof_h1_base_h2,
         }
     }
 
@@ -621,7 +667,7 @@ pub type HashWithNonce = (BigInt, BigInt);
 /// Alice's proof
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AliceProof {
-    z: BigInt,
+    pub z: BigInt,
     u: BigInt,
     w: BigInt,
     e: HashWithNonce,
@@ -967,7 +1013,7 @@ pub struct BobProof {
     t: BigInt,
     v: BigInt,
     w: BigInt,
-    z: BigInt,
+    pub z: BigInt,
     z_prim: BigInt,
     e: HashWithNonce,
     s: BigInt,
@@ -1101,7 +1147,7 @@ impl BobProof {
 /// Bob's extended proof, adds the knowledge of $`B = g^b \in \mathcal{G}`$
 #[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
 pub struct BobProofExt {
-    proof: BobProof,
+    pub proof: BobProof,
     u: GE,
     X: GE,
 }

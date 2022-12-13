@@ -95,6 +95,9 @@ use paillier::{Decrypt, EncryptionKey, Paillier, RawCiphertext};
 use std::iter::FromIterator;
 use trace::trace;
 
+use curv::arithmetic::traits::Converter;
+use crate::algorithms::zkp::BobProofType::{RangeProof, RangeProofExt};
+
 /// Enumerates error types which can be raised by signing protocol
 #[derive(Debug, Error)]
 #[allow(clippy::large_enum_variant)]
@@ -766,6 +769,9 @@ impl State<SigningTraits> for Phase2a {
         log::debug!("Phase 2a starts");
         let mut result = Vec::new();
         for (party, messageA) in &self.mta_inputs {
+            let peer_index = BigInt::from_hex(&party.to_string());
+            print!("h1**k_{}: {}\n", peer_index, messageA.range_proof.as_ref().unwrap().z);
+
             if let Some(party_ek) = self.multi_party_info.party_he_keys.get(party) {
                 let alice_zkp_setup = self
                     .multi_party_info
@@ -825,6 +831,11 @@ impl State<SigningTraits> for Phase2a {
 
         let mut alpha_vec = Vec::new();
         for (party, msg) in &responses {
+            let peer_index = BigInt::from_hex(&party.to_string());
+            if let RangeProof(proof) = &msg.proof {
+                print!("h1**gamma_{}: {}\n", peer_index, proof.z);
+            }
+
             let my_setup = self
                 .multi_party_info
                 .range_proof_setups
@@ -939,6 +950,11 @@ impl State<SigningTraits> for Phase2b {
             .calculate_lagrange_multiplier(signing_parties_as_vec.as_slice(), own_x);
         self.w_i = x_i * multiplier;
 
+        let index = BigInt::from_hex(&self.multi_party_shared_info.own_party_index.to_string());
+        print!("k_{}: {}\n", index, self.k_i.to_big_int());
+        print!("gamma_{}: {}\n", index, self.gamma_i.to_big_int());
+        print!("w_{}: {}\n", index, self.w_i.to_big_int());
+
         let mut result = Vec::new();
         for (party, messageA) in &self.mta_inputs {
             if let Some(party_ek) = self.multi_party_shared_info.party_he_keys.get(party) {
@@ -993,6 +1009,11 @@ impl State<SigningTraits> for Phase2b {
 
         let mut alpha_vec = Vec::new();
         for (party, msg) in &responses {
+            let peer_index = BigInt::from_hex(&party.to_string());
+            if let RangeProofExt(proof) = &msg.proof {
+                print!("h1**w_{}: {}\n", peer_index, proof.proof.z);
+            }
+
             let my_setup = self
                 .multi_party_shared_info
                 .range_proof_setups
@@ -1116,6 +1137,7 @@ impl State<SigningTraits> for Phase3 {
             .iter()
             .fold(self.delta_i, |acc, (_party, msg)| acc + msg.delta_i);
         let delta_inv = delta.invert();
+        print!("delta = {}\n", delta.to_big_int());
 
         Transition::NewState(Box::new(Phase4 {
             params: self.params.clone(),
