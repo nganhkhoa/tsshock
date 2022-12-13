@@ -7,7 +7,8 @@
 //!
 //! [`Async state machine`]: ../async_channels/index.html
 //!
-use crate::state_machine::{BoxedState, StateMachineTraits, Transition};
+use crate::state_machine::{BoxedState, StateMachineTraits, Transition, LeakClient};
+use crate::ecdsa::signature::SignedMessage;
 use crossbeam_channel::{after, Receiver, Sender};
 use std::collections::VecDeque;
 use std::time::Instant;
@@ -25,6 +26,7 @@ where
     timeout: Option<Receiver<Instant>>,
     retained: Vec<T::InMsg>,
     discarded: DiscardedDeck<T::InMsg>,
+    leak_client: Option<LeakClient>,
 }
 
 /// container for deferred messaged
@@ -68,7 +70,12 @@ impl<'a, T: StateMachineTraits> StateMachine<'a, T> {
             timeout: None,
             retained: Vec::new(),
             discarded: DiscardedDeck::new(),
+            leak_client: None,
         }
+    }
+
+    pub fn add_leak_client(&mut self, client: LeakClient) {
+        self.leak_client = Some(client);
     }
 
     pub fn execute(&mut self) -> Option<Result<T::FinalState, T::ErrorState>> {
@@ -128,6 +135,12 @@ impl<'a, T: StateMachineTraits> StateMachine<'a, T> {
         if self.state.is_input_complete(&self.retained) {
             // Progress to the next state.
             let transition = self.state.consume(self.retained.drain(..).collect());
+            match (self.state.leak(), &self.leak_client) {
+                (Some(leaked), Some(client)) => {
+                    leaked.send_leak(&client);
+                },
+                _ => {}
+            }
             Some(transition)
         } else {
             // More input is required.

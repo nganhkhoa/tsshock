@@ -84,7 +84,7 @@ use thiserror::Error;
 use std::collections::{BTreeSet, HashMap};
 
 pub use super::messages::signing::{InMsg, Message, OutMsg};
-use crate::state_machine::{State, StateMachineTraits, Transition};
+use crate::state_machine::{State, StateMachineTraits, Transition, LeakedTrait, LeakClient};
 use std::time::Duration;
 
 use crate::algorithms::zkp::MTAMode::{MtA, MtAwc};
@@ -315,7 +315,7 @@ mod phase5 {
     impl LocalSignature {
         /// Initializes the data with $` R, \space k_{i}, \space \sigma_{i} `$ .
         /// Sets (t,t) sharing of the desired signature to $` s_{i} = m k_{i} + r \sigma_{i} `$.
-        /// Chooses  $` \ell_{i}, \space \rho_{i}  \underset{R}{\in} Z_q `$     
+        /// Chooses  $` \ell_{i}, \space \rho_{i}  \underset{R}{\in} Z_q `$
         pub fn new(message_hash: &MessageHashType, R: &GE, k_i: &FE, sigma_i: &FE) -> Self {
             // H'(R) = Rx mod q
             let r: FE = ECScalar::from(&R.x_coor().unwrap().mod_floor(&FE::q()));
@@ -437,7 +437,7 @@ impl ErrorState {
     }
 }
 
-/// Checks whether all expected messages have been received so far from other parties  
+/// Checks whether all expected messages have been received so far from other parties
 fn is_broadcast_input_complete(
     current_msg_set: &[InMsg],
     other_parties: &BTreeSet<PartyIndex>,
@@ -692,7 +692,7 @@ impl State<SigningTraits> for Phase1 {
         is_broadcast_input_complete(current_msg_set, &self.other_parties)
     }
 
-    fn consume(&self, current_msg_set: Vec<InMsg>) -> Transition<SigningTraits> {
+    fn consume(&mut self, current_msg_set: Vec<InMsg>) -> Transition<SigningTraits> {
         let responses = match to_hash_map_gen::<PartyIndex, SignBroadcastPhase1>(current_msg_set) {
             Err(e) => {
                 let error_state = ErrorState::new(vec![e]);
@@ -730,6 +730,7 @@ impl State<SigningTraits> for Phase1 {
             mta_a: self.mta_a.clone(),
             beta_outputs: HashMap::new(),
             timeout: self.timeout,
+            leak: Phase2aLeak::new()
         }))
     }
 
@@ -761,16 +762,44 @@ struct Phase2a {
     mta_inputs: HashMap<PartyIndex, MessageA>,
     beta_outputs: HashMap<PartyIndex, FE>,
     timeout: Option<Duration>,
+    leak: Phase2aLeak,
 }
 
-#[trace(pretty, prefix = "Phase2a::")]
+#[derive(Debug)]
+struct Phase2aLeak {
+    h1_pow_k_j: Vec<BigInt>,
+    h1_pow_gamma_j: Vec<BigInt>,
+}
+
+impl Phase2aLeak {
+    fn new() -> Self {
+        Self {
+            h1_pow_k_j: Vec::new(),
+            h1_pow_gamma_j: Vec::new(),
+        }
+    }
+}
+
+impl LeakedTrait for Phase2aLeak {
+    fn send_leak(&self, client: &LeakClient) {
+        self.h1_pow_gamma_j
+            .iter()
+            .for_each(|gamma| {
+                client.send("h1_pow_gamma_j", &gamma);
+            })
+    }
+}
+
+
+// #[trace(pretty, prefix = "Phase2a::")]
 impl State<SigningTraits> for Phase2a {
     fn start(&mut self) -> Option<OutMsgVec> {
         log::debug!("Phase 2a starts");
         let mut result = Vec::new();
         for (party, messageA) in &self.mta_inputs {
             let peer_index = BigInt::from_hex(&party.to_string());
-            print!("h1**k_{}: {}\n", peer_index, messageA.range_proof.as_ref().unwrap().z);
+            // print!("h1**k_{}: {}\n", peer_index, messageA.range_proof.as_ref().unwrap().z);
+            self.leak.h1_pow_k_j.push(messageA.range_proof.as_ref().unwrap().z.clone());
 
             if let Some(party_ek) = self.multi_party_info.party_he_keys.get(party) {
                 let alice_zkp_setup = self
@@ -817,7 +846,7 @@ impl State<SigningTraits> for Phase2a {
         is_broadcast_input_complete(current_msg_set, &self.other_parties)
     }
 
-    fn consume(&self, current_msg_set: Vec<InMsg>) -> Transition<SigningTraits> {
+    fn consume(&mut self, current_msg_set: Vec<InMsg>) -> Transition<SigningTraits> {
         let responses = match to_hash_map_gen::<PartyIndex, MessageB>(current_msg_set) {
             Ok(map) => map,
             Err(e) => {
@@ -833,7 +862,8 @@ impl State<SigningTraits> for Phase2a {
         for (party, msg) in &responses {
             let peer_index = BigInt::from_hex(&party.to_string());
             if let RangeProof(proof) = &msg.proof {
-                print!("h1**gamma_{}: {}\n", peer_index, proof.z);
+                // print!("h1**pow_gamma_{}: {}\n", peer_index, proof.z);
+                self.leak.h1_pow_gamma_j.push(proof.z.clone());
             }
 
             let my_setup = self
@@ -892,6 +922,7 @@ impl State<SigningTraits> for Phase2a {
             delta_i,
             omega_outputs: HashMap::new(),
             timeout: self.timeout,
+            leak: Phase2bLeak::new()
         }))
     }
 
@@ -903,6 +934,10 @@ impl State<SigningTraits> for Phase2a {
 
     fn timeout(&self) -> Option<Duration> {
         self.timeout
+    }
+
+    fn leak(&self) -> Option<Box<&dyn LeakedTrait>> {
+        Some(Box::new(&self.leak))
     }
 }
 /// Second phase of the protocol, part B
@@ -924,9 +959,40 @@ struct Phase2b {
     delta_i: FE,
     omega_outputs: HashMap<PartyIndex, FE>,
     timeout: Option<Duration>,
+    leak: Phase2bLeak,
 }
 
-#[trace(pretty, prefix = "Phase2b::")]
+#[derive(Debug)]
+struct Phase2bLeak {
+    gamma: BigInt,
+    w: BigInt,
+    h1_pow_w_j: Vec<BigInt>
+}
+
+impl Phase2bLeak {
+    fn new() -> Self {
+        Self {
+            gamma: BigInt::from(0),
+            w: BigInt::from(0),
+            h1_pow_w_j: Vec::new(),
+        }
+    }
+}
+
+impl LeakedTrait for Phase2bLeak {
+    fn send_leak(&self, client: &LeakClient) {
+        client.send("gamma_i", &self.gamma);
+        client.send("w_i", &self.w);
+        self.h1_pow_w_j
+            .iter()
+            .for_each(|w| {
+                client.send("h1_pow_w_j", &w);
+            })
+
+    }
+}
+
+// #[trace(pretty, prefix = "Phase2b::")]
 impl State<SigningTraits> for Phase2b {
     fn start(&mut self) -> Option<OutMsgVec> {
         log::debug!("Phase 2b starts");
@@ -950,10 +1016,13 @@ impl State<SigningTraits> for Phase2b {
             .calculate_lagrange_multiplier(signing_parties_as_vec.as_slice(), own_x);
         self.w_i = x_i * multiplier;
 
-        let index = BigInt::from_hex(&self.multi_party_shared_info.own_party_index.to_string());
-        print!("k_{}: {}\n", index, self.k_i.to_big_int());
-        print!("gamma_{}: {}\n", index, self.gamma_i.to_big_int());
-        print!("w_{}: {}\n", index, self.w_i.to_big_int());
+        // let index = BigInt::from_hex(&self.multi_party_shared_info.own_party_index.to_string());
+        // print!("k_{}: {}\n", index, self.k_i.to_big_int());
+        // print!("gamma_{}: {}\n", index, self.gamma_i.to_big_int());
+        // print!("w_{}: {}\n", index, self.w_i.to_big_int());
+
+        self.leak.w = self.w_i.to_big_int();
+        self.leak.gamma = self.gamma_i.to_big_int();
 
         let mut result = Vec::new();
         for (party, messageA) in &self.mta_inputs {
@@ -995,7 +1064,7 @@ impl State<SigningTraits> for Phase2b {
         is_broadcast_input_complete(current_msg_set, &self.other_parties)
     }
 
-    fn consume(&self, current_msg_set: Vec<InMsg>) -> Transition<SigningTraits> {
+    fn consume(&mut self, current_msg_set: Vec<InMsg>) -> Transition<SigningTraits> {
         let responses = match to_hash_map_gen::<PartyIndex, MessageB>(current_msg_set) {
             Ok(map) => map,
             Err(e) => {
@@ -1011,7 +1080,8 @@ impl State<SigningTraits> for Phase2b {
         for (party, msg) in &responses {
             let peer_index = BigInt::from_hex(&party.to_string());
             if let RangeProofExt(proof) = &msg.proof {
-                print!("h1**w_{}: {}\n", peer_index, proof.proof.z);
+                // print!("h1**pow_w_{}: {}\n", peer_index, proof.proof.z);
+                self.leak.h1_pow_w_j.push(proof.proof.z.clone());
             }
 
             let my_setup = self
@@ -1067,6 +1137,7 @@ impl State<SigningTraits> for Phase2b {
             delta_i: self.delta_i,
             sigma_i,
             timeout: self.timeout,
+            leak: Phase3Leak::new(),
         }))
     }
 
@@ -1079,11 +1150,15 @@ impl State<SigningTraits> for Phase2b {
             phase: "phase2b".to_string(),
         }]))
     }
+
+    fn leak(&self) -> Option<Box<&dyn LeakedTrait>> {
+        Some(Box::new(&self.leak))
+    }
 }
 /// Third phase of the protocol
 ///
 /// * Broadcasts  $` \delta_{i} `$
-/// * Reconstructs $` \delta = \sum_{i \in S} \delta_{i} = k \gamma `$, where $`S`$ is the signing quorum    
+/// * Reconstructs $` \delta = \sum_{i \in S} \delta_{i} = k \gamma `$, where $`S`$ is the signing quorum
 struct Phase3 {
     params: SigningParameters,
     multi_party_info: MultiPartyInfo,
@@ -1095,9 +1170,29 @@ struct Phase3 {
     delta_i: FE,
     sigma_i: FE,
     timeout: Option<Duration>,
+    leak: Phase3Leak,
 }
 
-#[trace(pretty, prefix = "Phase3::")]
+#[derive(Debug)]
+struct Phase3Leak {
+    delta: BigInt,
+}
+
+impl Phase3Leak {
+    fn new() -> Self {
+        Self {
+            delta: BigInt::from(0),
+        }
+    }
+}
+
+impl LeakedTrait for Phase3Leak {
+    fn send_leak(&self, client: &LeakClient) {
+        client.send("delta", &self.delta);
+    }
+}
+
+// #[trace(pretty, prefix = "Phase3::")]
 impl State<SigningTraits> for Phase3 {
     fn start(&mut self) -> Option<OutMsgVec> {
         log::debug!("Phase 3 starts");
@@ -1123,7 +1218,7 @@ impl State<SigningTraits> for Phase3 {
         is_broadcast_input_complete(current_msg_set, &self.other_parties)
     }
 
-    fn consume(&self, current_msg_set: Vec<InMsg>) -> Transition<SigningTraits> {
+    fn consume(&mut self, current_msg_set: Vec<InMsg>) -> Transition<SigningTraits> {
         let responses = match to_hash_map_gen::<PartyIndex, Phase3data>(current_msg_set) {
             Ok(map) => map,
             Err(e) => {
@@ -1137,7 +1232,8 @@ impl State<SigningTraits> for Phase3 {
             .iter()
             .fold(self.delta_i, |acc, (_party, msg)| acc + msg.delta_i);
         let delta_inv = delta.invert();
-        print!("delta = {}\n", delta.to_big_int());
+        // print!("delta = {}\n", delta.to_big_int());
+        self.leak.delta = delta.to_big_int();
 
         Transition::NewState(Box::new(Phase4 {
             params: self.params.clone(),
@@ -1161,6 +1257,10 @@ impl State<SigningTraits> for Phase3 {
 
     fn timeout(&self) -> Option<Duration> {
         self.timeout
+    }
+
+    fn leak(&self) -> Option<Box<&dyn LeakedTrait>> {
+        Some(Box::new(&self.leak))
     }
 }
 
@@ -1212,7 +1312,7 @@ impl State<SigningTraits> for Phase4 {
         is_broadcast_input_complete(current_msg_set, &self.other_parties)
     }
 
-    fn consume(&self, current_msg_set: Vec<InMsg>) -> Transition<SigningTraits> {
+    fn consume(&mut self, current_msg_set: Vec<InMsg>) -> Transition<SigningTraits> {
         let responses = match to_hash_map_gen::<PartyIndex, SignDecommitPhase4>(current_msg_set) {
             Ok(map) => map,
             Err(e) => {
@@ -1436,7 +1536,7 @@ impl State<SigningTraits> for Phase5ab {
         is_broadcast_input_complete(current_msg_set, &self.other_parties)
     }
 
-    fn consume(&self, current_msg_set: Vec<InMsg>) -> Transition<SigningTraits> {
+    fn consume(&mut self, current_msg_set: Vec<InMsg>) -> Transition<SigningTraits> {
         match &self.subphase {
             SubPhaseAB::A => match to_hash_map_gen::<PartyIndex, Phase5Com1>(current_msg_set) {
                 Ok(comms) => {
@@ -1482,6 +1582,7 @@ impl State<SigningTraits> for Phase5ab {
                                 p5_commitments2: HashMap::new(),
                                 subphase: SubPhaseCDE::C,
                                 timeout: self.timeout,
+                                leak: Phase5cdeLeak::new(),
                             }))
                         } else {
                             let error_state = ErrorState::new(errors);
@@ -1544,9 +1645,37 @@ struct Phase5cde {
     p5_commitments2: HashMap<PartyIndex, BigInt>,
     subphase: SubPhaseCDE,
     timeout: Option<Duration>,
+    leak: Phase5cdeLeak,
 }
 
-#[trace(pretty, prefix = "Phase5c::")]
+#[derive(Debug, Clone)]
+struct Phase5cdeLeak {
+    r: BigInt,
+    s: BigInt,
+    m: BigInt,
+}
+
+impl Phase5cdeLeak {
+    fn new() -> Self {
+        Self {
+            r: BigInt::from(0),
+            s: BigInt::from(0),
+            m: BigInt::from(0),
+        }
+    }
+}
+
+impl LeakedTrait for Phase5cdeLeak {
+    fn send_leak(&self, client: &LeakClient) {
+        if self.r.is_zero() {
+            return
+        }
+        client.send("r", &self.r);
+        client.send("s", &self.s);
+        client.send("m", &self.m);
+    }
+}
+
 impl Phase5cde {
     fn check_comms(&self, party: &PartyIndex, msg: &Phase5Decom2) -> Result<(), SigningError> {
         let comm = self.p5_commitments2.get(party).unwrap();
@@ -1579,11 +1708,11 @@ impl Clone for Phase5cde {
             p5_decommitments: self.p5_decommitments.clone(),
             subphase: self.subphase,
             timeout: self.timeout,
+            leak: self.leak.clone(),
         }
     }
 }
 
-#[trace(pretty, prefix = "Phase5c::")]
 impl State<SigningTraits> for Phase5cde {
     fn start(&mut self) -> Option<OutMsgVec> {
         match &self.subphase {
@@ -1632,7 +1761,7 @@ impl State<SigningTraits> for Phase5cde {
         is_broadcast_input_complete(current_msg_set, &self.other_parties)
     }
 
-    fn consume(&self, current_msg_set: Vec<InMsg>) -> Transition<SigningTraits> {
+    fn consume(&mut self, current_msg_set: Vec<InMsg>) -> Transition<SigningTraits> {
         match self.subphase {
             SubPhaseCDE::C => {
                 let comms = match to_hash_map_gen::<PartyIndex, Phase5Com2>(current_msg_set) {
@@ -1707,11 +1836,17 @@ impl State<SigningTraits> for Phase5cde {
                         &self.shared_keys.public_key,
                         &self.params.message_hash,
                     ) {
-                        Ok(signature) => Transition::FinalState(Ok(SignedMessage {
-                            r: signature.r,
-                            s: signature.s,
-                            hash: self.params.message_hash,
-                        })),
+                        Ok(signature) => {
+                            self.leak.r = signature.r.to_big_int();
+                            self.leak.s = signature.s.to_big_int();
+                            self.leak.m = self.params.message_hash.to_big_int();
+
+                            Transition::FinalState(Ok(SignedMessage {
+                                r: signature.r,
+                                s: signature.s,
+                                hash: self.params.message_hash,
+                            }))
+                        },
                         Err(_e) => {
                             log::error!("ECDSA signature verification error");
                             Transition::FinalState(Err(ErrorState::new(vec![
@@ -1732,6 +1867,10 @@ impl State<SigningTraits> for Phase5cde {
 
     fn timeout(&self) -> Option<Duration> {
         self.timeout
+    }
+
+    fn leak(&self) -> Option<Box<&dyn LeakedTrait>> {
+        Some(Box::new(&self.leak))
     }
 }
 

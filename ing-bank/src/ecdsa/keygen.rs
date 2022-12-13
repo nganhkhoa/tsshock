@@ -431,7 +431,7 @@ impl State<KeyGeneratorTraits> for Phase1 {
         is_broadcast_input_complete(current_msg_set, &self.other_parties)
     }
 
-    fn consume(&self, current_msg_set: Vec<InMsg>) -> Transition<KeyGeneratorTraits> {
+    fn consume(&mut self, current_msg_set: Vec<InMsg>) -> Transition<KeyGeneratorTraits> {
         match to_hash_map_gen::<PartyIndex, Phase1Broadcast>(current_msg_set) {
             Ok(comms) => {
                 let errors = comms
@@ -569,7 +569,7 @@ impl State<KeyGeneratorTraits> for Phase2 {
         is_broadcast_input_complete(current_msg_set, &self.other_parties)
     }
 
-    fn consume(&self, current_msg_set: Vec<InMsg>) -> Transition<KeyGeneratorTraits> {
+    fn consume(&mut self, current_msg_set: Vec<InMsg>) -> Transition<KeyGeneratorTraits> {
         let decomms = match to_hash_map_gen::<PartyIndex, DecommitPublicKey>(current_msg_set) {
             Ok(map) => map,
             Err(e) => return Transition::FinalState(Err(ErrorState::new(e))),
@@ -787,7 +787,7 @@ impl State<KeyGeneratorTraits> for Phase3 {
         is_broadcast_input_complete(current_msg_set, &self.other_parties)
     }
 
-    fn consume(&self, current_msg_set: Vec<InMsg>) -> Transition<KeyGeneratorTraits> {
+    fn consume(&mut self, current_msg_set: Vec<InMsg>) -> Transition<KeyGeneratorTraits> {
         let mut shares = match to_hash_map_gen::<PartyIndex, FeldmanVSS>(current_msg_set) {
             Ok(map) => map,
             Err(e) => return Transition::FinalState(Err(ErrorState::new(e))),
@@ -927,7 +927,7 @@ impl State<KeyGeneratorTraits> for Phase4 {
         is_broadcast_input_complete(current_msg_set, &self.other_parties)
     }
 
-    fn consume(&self, current_msg_set: Vec<InMsg>) -> Transition<KeyGeneratorTraits> {
+    fn consume(&mut self, current_msg_set: Vec<InMsg>) -> Transition<KeyGeneratorTraits> {
         let proofs = match to_hash_map_gen::<PartyIndex, DLogProof>(current_msg_set) {
             Ok(p) => p,
             Err(e) => {

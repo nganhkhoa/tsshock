@@ -290,7 +290,7 @@ pub mod old_member {
             super::is_broadcast_input_complete(current_msg_set, &self.new_committee)
         }
 
-        fn consume(&self, _current_msg_set: Vec<InMsg>) -> Transition<KeyResharingTraits> {
+        fn consume(&mut self, _current_msg_set: Vec<InMsg>) -> Transition<KeyResharingTraits> {
             Transition::NewState(Box::new(Phase2 {
                 new_committee: self.new_committee.clone(),
                 vss_scheme: self.vss_scheme.clone(),
@@ -363,7 +363,7 @@ pub mod old_member {
             super::is_broadcast_input_complete(current_msg_set, &self.new_committee)
         }
 
-        fn consume(&self, _current_msg_set: Vec<InMsg>) -> Transition<KeyResharingTraits> {
+        fn consume(&mut self, _current_msg_set: Vec<InMsg>) -> Transition<KeyResharingTraits> {
             log::info!("Phase2 succeeded");
             self.zeroize_secret_shares();
             Transition::FinalState(Ok(FinalState {}))
@@ -539,7 +539,7 @@ pub mod new_member {
             super::is_broadcast_input_complete(current_msg_set, &self.old_committee)
         }
 
-        fn consume(&self, current_msg_set: Vec<InMsg>) -> Transition<KeyResharingTraits> {
+        fn consume(&mut self, current_msg_set: Vec<InMsg>) -> Transition<KeyResharingTraits> {
             match to_hash_map_gen::<PartyIndex, Phase1Broadcast>(current_msg_set) {
                 Ok(input) => {
                     if input.is_empty() {
@@ -709,7 +709,7 @@ pub mod new_member {
             )
         }
 
-        fn consume(&self, current_msg_set: Vec<InMsg>) -> Transition<KeyResharingTraits> {
+        fn consume(&mut self, current_msg_set: Vec<InMsg>) -> Transition<KeyResharingTraits> {
             match to_hash_map_gen::<PartyIndex, Phase2Broadcast>(current_msg_set) {
                 Ok(input) => {
                     let mut errors = input
@@ -818,7 +818,7 @@ pub mod new_member {
             )
         }
 
-        fn consume(&self, current_msg_set: Vec<InMsg>) -> Transition<KeyResharingTraits> {
+        fn consume(&mut self, current_msg_set: Vec<InMsg>) -> Transition<KeyResharingTraits> {
             match to_hash_map_gen::<PartyIndex, VSS>(current_msg_set) {
                 Err(e) => {
                     let error_state = ErrorState::new(e);
@@ -958,7 +958,7 @@ pub mod new_member {
             )
         }
 
-        fn consume(&self, _current_msg_set: Vec<InMsg>) -> Transition<KeyResharingTraits> {
+        fn consume(&mut self, _current_msg_set: Vec<InMsg>) -> Transition<KeyResharingTraits> {
             let mut new_committee = self
                 .previous_phase
                 .previous_phase

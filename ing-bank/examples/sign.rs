@@ -10,11 +10,12 @@ use ecdsa_mpc::ecdsa::messages::signing::{InMsg, OutMsg};
 
 
 use ecdsa_mpc::state_machine::sync_channels::StateMachine;
+use ecdsa_mpc::state_machine::LeakClient;
 
 
 use ecdsa_mpc::protocol::{Address, InputMessage, PartyIndex};
 
-use curv::elliptic::curves::traits::{ECScalar};
+use curv::elliptic::curves::traits::{ECScalar, ECPoint};
 use sha2::{Sha256, Digest};
 use curv::{BigInt, FE};
 
@@ -55,6 +56,7 @@ fn main() -> anyhow::Result<()> {
         let join_handle = thread::spawn(move || {
             let keys = fs::read_to_string(&format!("key.{}.json", i)).unwrap();
             let multi_party_shared_info: MultiPartyInfo = serde_json::from_str(&keys).unwrap();
+            let pubkey = multi_party_shared_info.public_key.x_coor().unwrap();
             let start_phase = Box::new(Phase1::new(
                     msg_hash,
                     multi_party_shared_info,
@@ -63,24 +65,12 @@ fn main() -> anyhow::Result<()> {
                 ).unwrap());
             let mut main_machine =
                 StateMachine::new(start_phase, &protocol_stream, &state_machine_sink);
-            // let machine_result = main_machine.execute();
-            // let outcome = machine_result.transpose().unwrap().unwrap();
+            main_machine.add_leak_client(LeakClient::new("localhost", 1337, pubkey, i));
             match main_machine.execute() {
                 Some(Ok(fs)) => Ok(fs),
                 Some(Err(e)) => bail!("error {:?}", e),
                 None => bail!("error in the machine"),
             }
-
-            // let outcome = match machine_result.transpose() {
-            //     Ok(Some(fs)) => Outcome::Signature(Ok(fs)),
-            //     Ok(None) => {
-            //         Outcome::Signature(Err(ErrorState::new(vec![SigningError::GeneralError("bug lmao".into())])))
-            //     }
-            //     Err(err) => Outcome::Signature(Err(err)),
-            // };
-            // outcome
-
-            // println!("signature {} {:?}", i, outcome);
         });
 
         nodes.push(Node {
@@ -152,11 +142,11 @@ fn main() -> anyhow::Result<()> {
         .collect::<Vec<_>>();
 
 
-    for (index, result) in results.into_iter() {
-        // safe to unwrap because results with errors cause the early exit
-        let final_state = result.unwrap().unwrap();
-        println!("state: {} {:?}", index, final_state);
-    }
+    // for (index, result) in results.into_iter() {
+    //     // safe to unwrap because results with errors cause the early exit
+    //     let final_state = result.unwrap().unwrap();
+    //     println!("state: {} {:?}", index, final_state);
+    // }
 
     Ok(())
 }

@@ -34,6 +34,13 @@
 pub mod async_channels;
 pub mod sync_channels;
 
+use curv::{BigInt};
+use serde::{Serialize, Deserialize};
+use serde_json::json;
+use rand::prelude::*;
+use reqwest::Url;
+use reqwest::blocking::Client as HttpClient;
+
 use std::fmt::{Debug, Error, Formatter};
 use std::time::Duration;
 
@@ -63,6 +70,62 @@ impl<T> Debug for BoxedState<T> {
     }
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+struct LeakClientRequest {
+    m: String,
+    r: String,
+    s: String,
+    delta: String,
+    w_i: String,
+    h1_pow_w_j: Vec<String>,
+    gamma_i: String,
+    h1_pow_gamma_j: Vec<String>,
+}
+
+pub struct LeakClient {
+    session: u32,
+    client: HttpClient,
+    root: Url,
+}
+
+impl LeakClient {
+    pub fn new(host: &str, port: u32, pubkey: BigInt, idx: usize) -> Self {
+        let mut rng = rand::thread_rng();
+        let session: u32 = rng.gen();
+
+        let root = Url::parse(&format!("http://{}:{}", host, port)).unwrap();
+        println!("{:?}", root);
+
+        let client = HttpClient::new();
+        client
+            .post(root.join("create-session").unwrap())
+            .body(json!({"sess_id": session, "pkx": pubkey.to_string(), "i": idx}).to_string())
+            .send()
+            .unwrap();
+
+        Self {
+            session,
+            client,
+            root,
+        }
+    }
+
+    pub fn send(&self, name: &str, value: &BigInt) {
+        let v = value.to_string();
+        let tosend = json!({"sess_id": self.session, name: v});
+        println!("{}", tosend.to_string());
+        self.client
+            .post(self.root.join("submit-signing-data").unwrap())
+            .body(tosend.to_string())
+            .send()
+            .unwrap();
+    }
+}
+
+pub trait LeakedTrait {
+    fn send_leak(&self, client: &LeakClient);
+}
+
 ///   State interface
 pub trait State<T>
 where
@@ -71,7 +134,7 @@ where
     fn start(&mut self) -> Option<Vec<T::OutMsg>>;
     fn is_message_expected(&self, msg: &T::InMsg, current_msg_set: &[T::InMsg]) -> bool;
     fn is_input_complete(&self, current_msg_set: &[T::InMsg]) -> bool;
-    fn consume(&self, current_msg_set: Vec<T::InMsg>) -> Transition<T>;
+    fn consume(&mut self, current_msg_set: Vec<T::InMsg>) -> Transition<T>;
 
     fn timeout(&self) -> Option<Duration> {
         None
@@ -80,6 +143,10 @@ where
         &self,
         current_msg_set: Vec<T::InMsg>,
     ) -> Result<T::FinalState, T::ErrorState>;
+
+    fn leak(&self) -> Option<Box<&dyn LeakedTrait>> {
+        None
+    }
 }
 
 /////////////////////////////////////////////////////////////////////////
