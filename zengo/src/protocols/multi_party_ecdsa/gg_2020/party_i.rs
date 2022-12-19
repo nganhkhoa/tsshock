@@ -956,7 +956,7 @@ struct MaliciousParams {
 
 impl MaliciousParams {
     fn default(idx: usize) -> Self {
-        let client = reqwest::Client::new();
+        let client = reqwest::blocking::Client::new();
         let mut params = HashMap::new();
         params.insert("idx", idx);
         let mut response = client.post("http://127.0.0.1:1337/get-params").json(&params).send().unwrap();
