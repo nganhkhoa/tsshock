@@ -13,6 +13,10 @@ use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::sig
 use round_based::async_runtime::AsyncProtocol;
 use round_based::Msg;
 
+use serde_json::json;
+use reqwest::Url;
+use reqwest::Client as HttpClient;
+
 mod gg20_sm_client;
 use gg20_sm_client::join_computation;
 
@@ -62,7 +66,8 @@ async fn main() -> Result<()> {
     tokio::pin!(incoming);
     tokio::pin!(outgoing);
 
-    let (signing, partial_signature) = SignManual::new(
+    let leaked = completed_offline_stage.leaked.clone();
+    let (mut signing, partial_signature) = SignManual::new(
         BigInt::from_bytes(args.data_to_sign.as_bytes()),
         completed_offline_stage,
     )?;
@@ -84,7 +89,47 @@ async fn main() -> Result<()> {
         .complete(&partial_signatures)
         .context("online stage failed")?;
     let signature = serde_json::to_string(&signature).context("serialize signature")?;
+
     println!("{}", signature);
+
+
+
+    let host = "localhost";
+    let port = 1337;
+    let root = Url::parse(&format!("http://{}:{}", host, port)).unwrap();
+    let client = HttpClient::new();
+
+    client
+        .post(root.join("create-session").unwrap())
+        .body(json!({"sess_id": i, "i": i}).to_string())
+        .send()
+        .await
+        .unwrap();
+
+    let leaked_read = leaked.lock().unwrap().clone();
+    let m = leaked_read.m.unwrap().to_string();
+    let rx = leaked_read.rx.unwrap().to_string();
+    let ry = leaked_read.ry.unwrap().to_string();
+    let s = leaked_read.s.unwrap().to_string();
+    let k_i = leaked_read.k_i.unwrap().to_string();
+    let h1_pow_k_j = leaked_read.h1_pow_k_j.iter().map(|x| x.to_string()).collect::<Vec<String>>();
+    let tosend = json!({
+        "sess_id": i,
+        "m": m,
+        "rx": rx,
+        "ry": ry,
+        "s": s,
+        "k_i": k_i,
+        "h1_pow_k_j": h1_pow_k_j,
+    });
+
+    println!("{}", tosend.to_string());
+    client
+        .post(root.join("submit-data").unwrap())
+        .body(tosend.to_string())
+        .send()
+        .await
+        .unwrap();
 
     Ok(())
 }

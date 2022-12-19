@@ -2,6 +2,7 @@
 
 use std::convert::TryFrom;
 use std::iter;
+use std::sync::{Arc, Mutex};
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -48,6 +49,30 @@ pub struct SI(pub Point<Secp256k1>);
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct HEGProof(pub HomoELGamalProof<Secp256k1, Sha256>);
 
+#[derive(Clone, Debug)]
+pub struct Leaked {
+    pub k_i: Option<BigInt>,
+    pub h1_pow_k_j: Vec<BigInt>,
+    pub m: Option<BigInt>,
+    pub rx: Option<BigInt>,
+    pub ry: Option<BigInt>,
+    pub s: Option<BigInt>,
+}
+
+impl Leaked {
+    pub fn new() -> Self {
+        Self {
+            k_i: None,
+            h1_pow_k_j: Vec::new(),
+            m: None,
+            rx: None,
+            ry: None,
+            s: None
+        }
+    }
+
+}
+
 pub struct Round0 {
     /// Index of this party
     ///
@@ -65,7 +90,7 @@ pub struct Round0 {
 }
 
 impl Round0 {
-    pub fn proceed<O>(self, mut output: O) -> Result<Round1>
+    pub fn proceed<O>(self, mut output: O, leaked: &mut Leaked) -> Result<Round1>
     where
         O: Push<Msg<(MessageA, SignBroadcastPhase1)>>,
     {
@@ -82,6 +107,7 @@ impl Round0 {
         let (bc1, decom1) = sign_keys.phase1_broadcast();
 
         println!("k_{}: {}", self.s_l[(self.i - 1) as usize] - 1, sign_keys.k_i.to_bigint());
+        leaked.k_i = Some(sign_keys.k_i.to_bigint());
 
         let party_ek = self.local_key.paillier_key_vec[usize::from(self.local_key.i - 1)].clone();
         let m_a = MessageA::a(&sign_keys.k_i, &party_ek, &self.local_key.h1_h2_n_tilde_vec);
@@ -125,6 +151,7 @@ impl Round1 {
         self,
         input: BroadcastMsgs<(MessageA, SignBroadcastPhase1)>,
         mut output: O,
+        leaked: &mut Leaked,
     ) -> Result<Round2>
     where
         O: Push<Msg<(GammaI, WI)>>,
@@ -150,6 +177,7 @@ impl Round1 {
         for j in 0..ttag - 1 {
             let ind = if j < i { j } else { j + 1 };
             println!("h1_pow_k_{}: {}", l_s[ind], m_a_vec[ind].range_proofs[l_s[i]].z);
+            leaked.h1_pow_k_j.push(m_a_vec[ind].range_proofs[l_s[i]].z.clone());
             let (m_b_gamma, beta_gamma, _beta_randomness, _beta_tag) = MessageB::b(
                 &self.sign_keys.gamma_i,
                 &self.local_key.paillier_key_vec[l_s[ind]],
@@ -501,6 +529,7 @@ impl Round5 {
         self,
         input: BroadcastMsgs<(RDash, Vec<PDLwSlackProof>)>,
         mut output: O,
+        leaked: Arc<Mutex<Leaked>>,
     ) -> Result<Round6>
     where
         O: Push<Msg<(SI, HEGProof)>>,
@@ -557,6 +586,7 @@ impl Round5 {
                 t_vec: self.t_vec,
                 R: self.R,
                 sigma_i: self.sigma_i,
+                leaked,
             },
         })
     }
@@ -582,6 +612,7 @@ impl Round6 {
     pub fn proceed(
         self,
         input: BroadcastMsgs<(SI, HEGProof)>,
+        // leaked: Box<Leaked>,
     ) -> Result<CompletedOfflineStage, Error> {
         let (S_i_vec, hegp_vec): (Vec<_>, Vec<_>) = input
             .into_vec_including_me((SI(self.S_i), HEGProof(self.homo_elgamal_proof)))
@@ -601,7 +632,6 @@ impl Round6 {
         .map_err(Error::Round6VerifyProof)?;
         LocalSignature::phase6_check_S_i_sum(&self.protocol_output.local_key.y_sum_s, &S_i_vec)
             .map_err(Error::Round6CheckSig)?;
-
         Ok(self.protocol_output)
     }
 
@@ -622,11 +652,18 @@ pub struct CompletedOfflineStage {
     t_vec: Vec<Point<Secp256k1>>,
     R: Point<Secp256k1>,
     sigma_i: Scalar<Secp256k1>,
+    pub leaked: Arc<Mutex<Leaked>>,
 }
 
 impl CompletedOfflineStage {
     pub fn public_key(&self) -> &Point<Secp256k1> {
         &self.local_key.y_sum_s
+    }
+
+    pub fn add_leaked(self, leaked: Arc<Mutex<Leaked>>) -> Self {
+        let mut s = self.clone();
+        s.leaked = leaked.clone();
+        s
     }
 }
 
@@ -636,6 +673,7 @@ pub struct PartialSignature(Scalar<Secp256k1>);
 #[derive(Clone)]
 pub struct Round7 {
     local_signature: LocalSignature,
+    leaked: Arc<Mutex<Leaked>>
 }
 
 impl Round7 {
@@ -643,10 +681,6 @@ impl Round7 {
         message: &BigInt,
         completed_offline_stage: CompletedOfflineStage,
     ) -> Result<(Self, PartialSignature)> {
-        println!("m: {}", message);
-        println!("rx: {}", completed_offline_stage.R.x_coord().unwrap());
-        println!("ry: {}", completed_offline_stage.R.y_coord().unwrap());
-
         let local_signature = LocalSignature::phase7_local_sig(
             &completed_offline_stage.sign_keys.k_i,
             message,
@@ -655,15 +689,28 @@ impl Round7 {
             &completed_offline_stage.local_key.y_sum_s,
         );
         let partial = PartialSignature(local_signature.s_i.clone());
-        Ok((Self { local_signature }, partial))
+        println!("leaked r7: {:?}", completed_offline_stage.leaked);
+        Ok((Self { local_signature, leaked: completed_offline_stage.leaked.clone() }, partial))
     }
 
-    pub fn proceed_manual(self, sigs: &[PartialSignature]) -> Result<SignatureRecid> {
+    pub fn proceed_manual(&mut self, sigs: &[PartialSignature]) -> Result<SignatureRecid> {
         let sigs = sigs.iter().map(|s_i| s_i.0.clone()).collect::<Vec<_>>();
         let result = self.local_signature
             .output_signature(&sigs)
             .map_err(Error::Round7);
-        println!("s: {}", result.as_ref().unwrap().s.to_bigint());
+        let s = result.as_ref().unwrap().s.to_bigint();
+
+        println!("m: {}", self.local_signature.m);
+        println!("rx: {}", self.local_signature.R.x_coord().unwrap());
+        println!("ry: {}", self.local_signature.R.y_coord().unwrap());
+        println!("s: {}", s);
+
+        let mut leaked = self.leaked.lock().unwrap();
+        leaked.m = Some(self.local_signature.m.clone());
+        leaked.rx = self.local_signature.R.x_coord();
+        leaked.ry = self.local_signature.R.x_coord();
+        leaked.s = Some(s);
+        println!("leaked r7': {:?}", self.leaked);
         result
     }
 }

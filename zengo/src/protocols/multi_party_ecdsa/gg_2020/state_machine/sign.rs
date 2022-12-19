@@ -23,6 +23,7 @@
 use std::convert::TryFrom;
 use std::mem::replace;
 use std::time::Duration;
+use std::sync::{Arc, Mutex};
 
 use round_based::containers::{push::Push, BroadcastMsgs, MessageStore, P2PMsgs, Store, StoreErr};
 use round_based::{IsCritical, Msg, StateMachine};
@@ -62,6 +63,8 @@ pub struct OfflineStage {
 
     party_i: u16,
     party_n: u16,
+
+    leaked: Arc<Mutex<Leaked>>,
 }
 
 impl OfflineStage {
@@ -115,6 +118,8 @@ impl OfflineStage {
 
             party_i: i,
             party_n: n,
+
+            leaked: Arc::new(Mutex::new(Leaked::new())),
         })
     }
 
@@ -131,113 +136,123 @@ impl OfflineStage {
         let store5_wants_more = self.msgs5.as_ref().map(|s| s.wants_more()).unwrap_or(false);
         let store6_wants_more = self.msgs6.as_ref().map(|s| s.wants_more()).unwrap_or(false);
 
-        let next_state: OfflineR;
-        let try_again: bool = match replace(&mut self.round, OfflineR::Gone) {
-            OfflineR::R0(round) if !round.is_expensive() || may_block => {
-                next_state = round
-                    .proceed(&mut self.msgs_queue)
-                    .map(OfflineR::R1)
-                    .map_err(Error::ProceedRound)?;
-                true
-            }
-            s @ OfflineR::R0(_) => {
-                next_state = s;
-                false
-            }
-            OfflineR::R1(round) if !store1_wants_more && (!round.is_expensive() || may_block) => {
-                let store = self.msgs1.take().ok_or(InternalError::StoreGone)?;
-                let msgs = store
-                    .finish()
-                    .map_err(InternalError::RetrieveMessagesFromStore)?;
-                next_state = round
-                    .proceed(msgs, &mut self.msgs_queue)
-                    .map(OfflineR::R2)
-                    .map_err(Error::ProceedRound)?;
-                true
-            }
-            s @ OfflineR::R1(_) => {
-                next_state = s;
-                false
-            }
-            OfflineR::R2(round) if !store2_wants_more && (!round.is_expensive() || may_block) => {
-                let store = self.msgs2.take().ok_or(InternalError::StoreGone)?;
-                let msgs = store
-                    .finish()
-                    .map_err(InternalError::RetrieveMessagesFromStore)?;
-                next_state = round
-                    .proceed(msgs, &mut self.msgs_queue)
-                    .map(OfflineR::R3)
-                    .map_err(Error::ProceedRound)?;
-                true
-            }
-            s @ OfflineR::R2(_) => {
-                next_state = s;
-                false
-            }
-            OfflineR::R3(round) if !store3_wants_more && (!round.is_expensive() || may_block) => {
-                let store = self.msgs3.take().ok_or(InternalError::StoreGone)?;
-                let msgs = store
-                    .finish()
-                    .map_err(InternalError::RetrieveMessagesFromStore)?;
-                next_state = round
-                    .proceed(msgs, &mut self.msgs_queue)
-                    .map(OfflineR::R4)
-                    .map_err(Error::ProceedRound)?;
-                true
-            }
-            s @ OfflineR::R3(_) => {
-                next_state = s;
-                false
-            }
-            OfflineR::R4(round) if !store4_wants_more && (!round.is_expensive() || may_block) => {
-                let store = self.msgs4.take().ok_or(InternalError::StoreGone)?;
-                let msgs = store
-                    .finish()
-                    .map_err(InternalError::RetrieveMessagesFromStore)?;
-                next_state = round
-                    .proceed(msgs, &mut self.msgs_queue)
-                    .map(OfflineR::R5)
-                    .map_err(Error::ProceedRound)?;
-                false
-            }
-            s @ OfflineR::R4(_) => {
-                next_state = s;
-                false
-            }
-            OfflineR::R5(round) if !store5_wants_more && (!round.is_expensive() || may_block) => {
-                let store = self.msgs5.take().ok_or(InternalError::StoreGone)?;
-                let msgs = store
-                    .finish()
-                    .map_err(InternalError::RetrieveMessagesFromStore)?;
-                next_state = round
-                    .proceed(msgs, &mut self.msgs_queue)
-                    .map(OfflineR::R6)
-                    .map_err(Error::ProceedRound)?;
-                false
-            }
-            s @ OfflineR::R5(_) => {
-                next_state = s;
-                false
-            }
-            OfflineR::R6(round) if !store6_wants_more && (!round.is_expensive() || may_block) => {
-                let store = self.msgs6.take().ok_or(InternalError::StoreGone)?;
-                let msgs = store
-                    .finish()
-                    .map_err(InternalError::RetrieveMessagesFromStore)?;
-                next_state = round
-                    .proceed(msgs)
-                    .map(OfflineR::Finished)
-                    .map_err(Error::ProceedRound)?;
-                false
-            }
-            s @ OfflineR::R6(_) => {
-                next_state = s;
-                false
-            }
-            s @ OfflineR::Finished(_) | s @ OfflineR::Gone => {
-                next_state = s;
-                false
-            }
+        println!("proceed round");
+        let (next_state, try_again) = {
+            let leaked = &mut self.leaked.lock().unwrap();
+
+            let next_state: OfflineR;
+            let try_again: bool = match replace(&mut self.round, OfflineR::Gone) {
+                OfflineR::R0(round) if !round.is_expensive() || may_block => {
+                    next_state = round
+                        .proceed(&mut self.msgs_queue, leaked)
+                        .map(OfflineR::R1)
+                        .map_err(Error::ProceedRound)?;
+                    println!("leaked r0 {:?}", leaked);
+                    true
+                }
+                s @ OfflineR::R0(_) => {
+                    next_state = s;
+                    false
+                }
+                OfflineR::R1(round) if !store1_wants_more && (!round.is_expensive() || may_block) => {
+                    let store = self.msgs1.take().ok_or(InternalError::StoreGone)?;
+                    let msgs = store
+                        .finish()
+                        .map_err(InternalError::RetrieveMessagesFromStore)?;
+                    next_state = round
+                        .proceed(msgs, &mut self.msgs_queue, leaked)
+                        .map(OfflineR::R2)
+                        .map_err(Error::ProceedRound)?;
+                    println!("leaked r1 {:?}", leaked);
+                    true
+                }
+                s @ OfflineR::R1(_) => {
+                    next_state = s;
+                    false
+                }
+                OfflineR::R2(round) if !store2_wants_more && (!round.is_expensive() || may_block) => {
+                    let store = self.msgs2.take().ok_or(InternalError::StoreGone)?;
+                    let msgs = store
+                        .finish()
+                        .map_err(InternalError::RetrieveMessagesFromStore)?;
+                    next_state = round
+                        .proceed(msgs, &mut self.msgs_queue)
+                        .map(OfflineR::R3)
+                        .map_err(Error::ProceedRound)?;
+                    true
+                }
+                s @ OfflineR::R2(_) => {
+                    next_state = s;
+                    false
+                }
+                OfflineR::R3(round) if !store3_wants_more && (!round.is_expensive() || may_block) => {
+                    let store = self.msgs3.take().ok_or(InternalError::StoreGone)?;
+                    let msgs = store
+                        .finish()
+                        .map_err(InternalError::RetrieveMessagesFromStore)?;
+                    next_state = round
+                        .proceed(msgs, &mut self.msgs_queue)
+                        .map(OfflineR::R4)
+                        .map_err(Error::ProceedRound)?;
+                    true
+                }
+                s @ OfflineR::R3(_) => {
+                    next_state = s;
+                    false
+                }
+                OfflineR::R4(round) if !store4_wants_more && (!round.is_expensive() || may_block) => {
+                    let store = self.msgs4.take().ok_or(InternalError::StoreGone)?;
+                    let msgs = store
+                        .finish()
+                        .map_err(InternalError::RetrieveMessagesFromStore)?;
+                    next_state = round
+                        .proceed(msgs, &mut self.msgs_queue)
+                        .map(OfflineR::R5)
+                        .map_err(Error::ProceedRound)?;
+                    false
+                }
+                s @ OfflineR::R4(_) => {
+                    next_state = s;
+                    false
+                }
+                OfflineR::R5(round) if !store5_wants_more && (!round.is_expensive() || may_block) => {
+                    let store = self.msgs5.take().ok_or(InternalError::StoreGone)?;
+                    let msgs = store
+                        .finish()
+                        .map_err(InternalError::RetrieveMessagesFromStore)?;
+                    next_state = round
+                        .proceed(msgs, &mut self.msgs_queue, self.leaked.clone())
+                        .map(OfflineR::R6)
+                        .map_err(Error::ProceedRound)?;
+                    println!("leaked r5 {:?}", leaked);
+                    false
+                }
+                s @ OfflineR::R5(_) => {
+                    next_state = s;
+                    false
+                }
+                OfflineR::R6(round) if !store6_wants_more && (!round.is_expensive() || may_block) => {
+                    let store = self.msgs6.take().ok_or(InternalError::StoreGone)?;
+                    let msgs = store
+                        .finish()
+                        .map_err(InternalError::RetrieveMessagesFromStore)?;
+                    next_state = round
+                        .proceed(msgs)
+                        .map(|s| s.add_leaked(self.leaked.clone()))
+                        .map(OfflineR::Finished)
+                        .map_err(Error::ProceedRound)?;
+                    false
+                }
+                s @ OfflineR::R6(_) => {
+                    next_state = s;
+                    false
+                }
+                s @ OfflineR::Finished(_) | s @ OfflineR::Gone => {
+                    next_state = s;
+                    false
+                }
+            };
+            (next_state, try_again)
         };
 
         self.round = next_state;
@@ -638,7 +653,7 @@ impl SignManual {
 
     /// `sigs` must not include partial signature produced by local party (only partial signatures produced
     /// by other parties)
-    pub fn complete(self, sigs: &[PartialSignature]) -> Result<SignatureRecid, SignError> {
+    pub fn complete(&mut self, sigs: &[PartialSignature]) -> Result<SignatureRecid, SignError> {
         self.state
             .proceed_manual(sigs)
             .map_err(SignError::CompleteSigning)
