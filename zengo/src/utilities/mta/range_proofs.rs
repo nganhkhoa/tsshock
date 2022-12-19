@@ -93,7 +93,7 @@ impl AliceZkpRound2 {
 /// Alice's proof
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AliceProof {
-    z: BigInt,
+    pub z: BigInt,
     e: BigInt,
     s: BigInt,
     s1: BigInt,

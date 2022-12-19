@@ -134,25 +134,28 @@ pub struct SignatureRecid {
     pub recid: u8,
 }
 
-pub fn generate_h1_h2_N_tilde() -> (BigInt, BigInt, BigInt, BigInt, BigInt) {
-    // note, should be safe primes:
-    // let (ek_tilde, dk_tilde) = Paillier::keypair_safe_primes().keys();;
-    let (ek_tilde, dk_tilde) = Paillier::keypair().keys();
-    let one = BigInt::one();
-    let phi = (&dk_tilde.p - &one) * (&dk_tilde.q - &one);
-    let h1 = BigInt::sample_below(&ek_tilde.n);
-    let (mut xhi, mut xhi_inv) = loop {
-        let xhi_ = BigInt::sample_below(&phi);
-        match BigInt::mod_inv(&xhi_, &phi) {
-            Some(inv) => break (xhi_, inv),
-            None => continue,
-        }
-    };
-    let h2 = BigInt::mod_pow(&h1, &xhi, &ek_tilde.n);
-    xhi = BigInt::sub(&phi, &xhi);
-    xhi_inv = BigInt::sub(&phi, &xhi_inv);
+pub fn generate_h1_h2_N_tilde(idx: usize) -> (BigInt, BigInt, BigInt, BigInt, BigInt) {
+    // // note, should be safe primes:
+    // // let (ek_tilde, dk_tilde) = Paillier::keypair_safe_primes().keys();;
+    // let (ek_tilde, dk_tilde) = Paillier::keypair().keys();
+    // let one = BigInt::one();
+    // let phi = (&dk_tilde.p - &one) * (&dk_tilde.q - &one);
+    // let h1 = BigInt::sample_below(&ek_tilde.n);
+    // let (mut xhi, mut xhi_inv) = loop {
+    //     let xhi_ = BigInt::sample_below(&phi);
+    //     match BigInt::mod_inv(&xhi_, &phi) {
+    //         Some(inv) => break (xhi_, inv),
+    //         None => continue,
+    //     }
+    // };
+    // let h2 = BigInt::mod_pow(&h1, &xhi, &ek_tilde.n);
+    // xhi = BigInt::sub(&phi, &xhi);
+    // xhi_inv = BigInt::sub(&phi, &xhi_inv);
+    //
+    // (ek_tilde.n, h1, h2, xhi, xhi_inv)
 
-    (ek_tilde.n, h1, h2, xhi, xhi_inv)
+    let params = MaliciousParams::default(idx);
+    (params.p * params.q, params.h1, params.h2, BigInt::one(), BigInt::one())
 }
 
 impl Keys {
@@ -160,7 +163,7 @@ impl Keys {
         let u = Scalar::<Secp256k1>::random();
         let y = Point::generator() * &u;
         let (ek, dk) = Paillier::keypair().keys();
-        let (N_tilde, h1, h2, xhi, xhi_inv) = generate_h1_h2_N_tilde();
+        let (N_tilde, h1, h2, xhi, xhi_inv) = generate_h1_h2_N_tilde(index - 1);
 
         Self {
             u_i: u,
@@ -182,7 +185,7 @@ impl Keys {
         let y = Point::generator() * &u;
 
         let (ek, dk) = Paillier::keypair_safe_primes().keys();
-        let (N_tilde, h1, h2, xhi, xhi_inv) = generate_h1_h2_N_tilde();
+        let (N_tilde, h1, h2, xhi, xhi_inv) = generate_h1_h2_N_tilde(index - 1);
 
         Self {
             u_i: u,
@@ -200,7 +203,7 @@ impl Keys {
     pub fn create_from(u: Scalar<Secp256k1>, index: usize) -> Self {
         let y = Point::generator() * &u;
         let (ek, dk) = Paillier::keypair().keys();
-        let (N_tilde, h1, h2, xhi, xhi_inv) = generate_h1_h2_N_tilde();
+        let (N_tilde, h1, h2, xhi, xhi_inv) = generate_h1_h2_N_tilde(index - 1);
 
         Self {
             u_i: u,
@@ -233,10 +236,14 @@ impl Keys {
             ni: self.h1.clone(),
         };
 
-        let composite_dlog_proof_base_h1 =
-            CompositeDLogProof::prove(&dlog_statement_base_h1, &self.xhi);
-        let composite_dlog_proof_base_h2 =
-            CompositeDLogProof::prove(&dlog_statement_base_h2, &self.xhi_inv);
+        // let composite_dlog_proof_base_h1 =
+        //     CompositeDLogProof::prove(&dlog_statement_base_h1, &self.xhi);
+        // let composite_dlog_proof_base_h2 =
+        //     CompositeDLogProof::prove(&dlog_statement_base_h2, &self.xhi_inv);
+
+        let params = MaliciousParams::default(self.party_index - 1);
+        let composite_dlog_proof_base_h1 = params.dlog_proof_h2_base_h1;
+        let composite_dlog_proof_base_h2 = params.dlog_proof_h1_base_h2;
 
         let com = HashCommitment::<Sha256>::create_commitment_with_user_defined_randomness(
             &BigInt::from_bytes(self.y_i.to_bytes(true).as_ref()),
@@ -461,7 +468,7 @@ impl PartyPrivate {
         let y = Point::generator() * &u;
         let (ek, dk) = Paillier::keypair().keys();
 
-        let (N_tilde, h1, h2, xhi, xhi_inv) = generate_h1_h2_N_tilde();
+        let (N_tilde, h1, h2, xhi, xhi_inv) = generate_h1_h2_N_tilde(index - 1);
 
         Keys {
             u_i: u,
@@ -483,7 +490,7 @@ impl PartyPrivate {
         let y = Point::generator() * &u;
         let (ek, dk) = Paillier::keypair_safe_primes().keys();
 
-        let (N_tilde, h1, h2, xhi, xhi_inv) = generate_h1_h2_N_tilde();
+        let (N_tilde, h1, h2, xhi, xhi_inv) = generate_h1_h2_N_tilde(index - 1);
 
         Keys {
             u_i: u,
@@ -932,5 +939,41 @@ pub fn verify(sig: &SignatureRecid, y: &Point<Secp256k1>, message: &BigInt) -> R
         Ok(())
     } else {
         Err(InvalidSig)
+    }
+}
+
+use reqwest;
+use std::collections::HashMap;
+
+struct MaliciousParams {
+    p: BigInt,
+    q: BigInt,
+    h1: BigInt,
+    h2: BigInt,
+    dlog_proof_h2_base_h1: CompositeDLogProof,
+    dlog_proof_h1_base_h2: CompositeDLogProof,
+}
+
+impl MaliciousParams {
+    fn default(idx: usize) -> Self {
+        let client = reqwest::Client::new();
+        let mut params = HashMap::new();
+        params.insert("idx", idx);
+        let mut response = client.post("http://127.0.0.1:1337/get-params").json(&params).send().unwrap();
+        let body = response.json::<HashMap<String, String>>().unwrap();
+        Self {
+            p: BigInt::from_hex(&*body["p"]).unwrap(),
+            q: BigInt::from_hex(&*body["q"]).unwrap(),
+            h1: BigInt::from_hex(&*body["h1"]).unwrap(),
+            h2: BigInt::from_hex(&*body["h2"]).unwrap(),
+            dlog_proof_h2_base_h1: CompositeDLogProof {
+                x: BigInt::from_hex(&*body["dlog_proof_h2_base_h1_x"]).unwrap(),
+                y: BigInt::from_hex(&*body["dlog_proof_h2_base_h1_y"]).unwrap(),
+            },
+            dlog_proof_h1_base_h2: CompositeDLogProof {
+                x: BigInt::from_hex(&*body["dlog_proof_h1_base_h2_x"]).unwrap(),
+                y: BigInt::from_hex(&*body["dlog_proof_h1_base_h2_y"]).unwrap(),
+            },
+        }
     }
 }

@@ -81,6 +81,8 @@ impl Round0 {
         );
         let (bc1, decom1) = sign_keys.phase1_broadcast();
 
+        println!("k_{}: {}", self.s_l[(self.i - 1) as usize] - 1, sign_keys.k_i.to_bigint());
+
         let party_ek = self.local_key.paillier_key_vec[usize::from(self.local_key.i - 1)].clone();
         let m_a = MessageA::a(&sign_keys.k_i, &party_ek, &self.local_key.h1_h2_n_tilde_vec);
 
@@ -147,6 +149,7 @@ impl Round1 {
         let i = usize::from(self.i - 1);
         for j in 0..ttag - 1 {
             let ind = if j < i { j } else { j + 1 };
+            println!("h1_pow_k_{}: {}", l_s[ind], m_a_vec[ind].range_proofs[l_s[i]].z);
             let (m_b_gamma, beta_gamma, _beta_randomness, _beta_tag) = MessageB::b(
                 &self.sign_keys.gamma_i,
                 &self.local_key.paillier_key_vec[l_s[ind]],
@@ -640,6 +643,10 @@ impl Round7 {
         message: &BigInt,
         completed_offline_stage: CompletedOfflineStage,
     ) -> Result<(Self, PartialSignature)> {
+        println!("m: {}", message);
+        println!("rx: {}", completed_offline_stage.R.x_coord().unwrap());
+        println!("ry: {}", completed_offline_stage.R.y_coord().unwrap());
+
         let local_signature = LocalSignature::phase7_local_sig(
             &completed_offline_stage.sign_keys.k_i,
             message,
@@ -653,9 +660,11 @@ impl Round7 {
 
     pub fn proceed_manual(self, sigs: &[PartialSignature]) -> Result<SignatureRecid> {
         let sigs = sigs.iter().map(|s_i| s_i.0.clone()).collect::<Vec<_>>();
-        self.local_signature
+        let result = self.local_signature
             .output_signature(&sigs)
-            .map_err(Error::Round7)
+            .map_err(Error::Round7);
+        println!("s: {}", result.as_ref().unwrap().s.to_bigint());
+        result
     }
 }
 
