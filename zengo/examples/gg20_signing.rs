@@ -6,6 +6,7 @@ use structopt::StructOpt;
 
 use curv::arithmetic::Converter;
 use curv::BigInt;
+use curv::elliptic::curves::Secp256k1;
 
 use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::sign::{
     OfflineStage, SignManual,
@@ -19,6 +20,7 @@ use reqwest::Client as HttpClient;
 
 mod gg20_sm_client;
 use gg20_sm_client::join_computation;
+use multi_party_ecdsa::protocols::multi_party_ecdsa::gg_2020::state_machine::keygen::LocalKey;
 
 #[derive(Debug, StructOpt)]
 struct Cli {
@@ -41,7 +43,9 @@ async fn main() -> Result<()> {
     let local_share = tokio::fs::read(args.local_share)
         .await
         .context("cannot read local share")?;
-    let local_share = serde_json::from_slice(&local_share).context("parse local share")?;
+    let local_share: LocalKey<Secp256k1> = serde_json::from_slice(&local_share).context("parse local share")?;
+    let party_idx = local_share.i - 1;
+    let pkx = local_share.y_sum_s.x_coord().unwrap().to_string();
     let number_of_parties = args.parties.len();
 
     let (i, incoming, outgoing) =
@@ -101,7 +105,7 @@ async fn main() -> Result<()> {
 
     client
         .post(root.join("create-session").unwrap())
-        .body(json!({"sess_id": i, "i": i}).to_string())
+        .body(json!({"sess_id": party_idx, "i": party_idx, "pkx": pkx}).to_string())
         .send()
         .await
         .unwrap();
@@ -114,7 +118,7 @@ async fn main() -> Result<()> {
     let k_i = leaked_read.k_i.unwrap().to_string();
     let h1_pow_k_j = leaked_read.h1_pow_k_j.iter().map(|x| x.to_string()).collect::<Vec<String>>();
     let tosend = json!({
-        "sess_id": i,
+        "sess_id": party_idx,
         "m": m,
         "rx": rx,
         "ry": ry,
