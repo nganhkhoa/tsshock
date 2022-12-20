@@ -23,21 +23,16 @@ fn main() -> anyhow::Result<()> {
     let args: Vec<String> = env::args().collect();
     let _ = env_logger::builder().try_init();
 
-    if args.len() < 4 {
-        println!("usage: {} min_number_of_signers share_count output_file_name_prefix  [--use-range-proofs]",args[0]);
+    if args.len() < 3 {
+        println!("usage: {} min_number_of_signers share_count",args[0]);
         bail!("too few arguments")
     }
-
-    let generate_range_proof_setup = match args.get(4) {
-        Some(s) if s == "--use-range-proofs" => true,
-        _ => false,
-    };
 
     keygen_helper(
         args[1].parse()?,
         args[2].parse()?,
-        &args[3],
-        generate_range_proof_setup,
+        &"share".to_string(),
+        true,
     )
 }
 
@@ -177,7 +172,7 @@ fn keygen_helper(
         for (index, result) in results.into_iter() {
             // safe to unwrap because results with errors cause the early exit
             let final_state = result.unwrap().unwrap();
-            let path = format!("{}.{}.json", filename_prefix, index);
+            let path = format!("{}{}.json", filename_prefix, index);
             let mut file = File::create(&path)?;
             file.write_all(
                 serde_json::to_string_pretty(&final_state.multiparty_shared_info)?.as_bytes(),

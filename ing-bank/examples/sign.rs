@@ -54,7 +54,7 @@ fn main() -> anyhow::Result<()> {
 
         let parties = parties.clone();
         let join_handle = thread::spawn(move || {
-            let keys = fs::read_to_string(&format!("key.{}.json", i)).unwrap();
+            let keys = fs::read_to_string(&format!("share{}.json", i)).unwrap();
             let multi_party_shared_info: MultiPartyInfo = serde_json::from_str(&keys).unwrap();
             let pubkey = multi_party_shared_info.public_key.x_coor().unwrap();
             let start_phase = Box::new(Phase1::new(
