@@ -19,8 +19,8 @@ use tofn::gg20::sign;
 fn basic_correctness() {
     set_up_logs();
 
-    let party_share_counts = PartyShareCounts::from_vec(vec![1, 2, 3, 4]).unwrap(); // 10 total shares
-    let threshold = 5;
+    let party_share_counts = PartyShareCounts::from_vec(vec![1, 1, 1, 1]).unwrap(); // 10 total shares
+    let threshold = 2;
 
     // keygen
     debug!("start keygen");
@@ -137,6 +137,7 @@ fn basic_correctness() {
 
 mod broadcaster {
     use std::sync::mpsc::{self, Receiver, Sender};
+    use tracing::debug;
 
     #[derive(Clone)]
     pub struct Broadcaster<T> {
