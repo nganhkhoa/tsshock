@@ -3,7 +3,72 @@ use crate::{
     sdk::{api::TofnResult, protocol::ProtocolOutput, protocol_builder::ProtocolBuilderOutput},
 };
 
+use tracing::debug;
+use serde_json::json;
+use reqwest::Url;
+use reqwest::blocking::Client as HttpClient;
+
+use libpaillier::unknown_order::BigNumber;
+use k256::Scalar;
+use crate::crypto_tools::k256_serde::ProjectivePoint;
+
+use std::string::ToString;
+
 use super::party_share_counts::PartyShareCounts;
+
+pub struct Leaker {
+    client: HttpClient,
+    root: Url,
+    id: usize,
+}
+
+impl Leaker {
+    pub fn new(id: usize) -> Self {
+        let host = "localhost";
+        let port = 1337;
+        let root = Url::parse(&format!("http://{}:{}", host, port)).unwrap();
+
+        let client = HttpClient::new();
+        Self {
+            client,
+            root,
+            id,
+        }
+    }
+
+    pub fn create_session(&self, pubkey: &ProjectivePoint) {
+        let as_bytes = pubkey.to_bytes();
+        let tosend = json!({"sess_id": self.id, "pkx": as_bytes[..], "i": self.id});
+        self.client
+            .post(self.root.join("create-session").unwrap())
+            .body(tosend.to_string())
+            .send()
+            .unwrap();
+    }
+
+    pub fn send_bn(&self, name: &str, value: &BigNumber) {
+        let tosend = json!({"sess_id": self.id, name: value.to_string()});
+        debug!("{}", tosend.to_string());
+        self.client
+            .post(self.root.join("submit-signing-data").unwrap())
+            .body(tosend.to_string())
+            .send()
+            .unwrap();
+    }
+
+    pub fn send(&self, name: &str, value: &Scalar) {
+        let as_bytes = value.to_bytes();
+        let as_str = format!("0x{:x}", as_bytes);
+        let tosend = json!({"sess_id": self.id, name: as_str});
+        debug!("{}", tosend.to_string());
+        self.client
+            .post(self.root.join("submit-signing-data").unwrap())
+            .body(tosend.to_string())
+            .send()
+            .unwrap();
+    }
+
+}
 
 // party-level info persisted throughout the protocol ("deluxe" depends on `P`)
 pub struct ProtocolInfoDeluxe<K, P> {
@@ -18,6 +83,7 @@ pub struct ProtocolInfoDeluxe<K, P> {
 pub struct ProtocolInfo<K> {
     share_count: usize,
     share_id: TypedUsize<K>,
+    pub leaker: Leaker,
 }
 
 impl<K> ProtocolInfo<K> {
@@ -72,6 +138,7 @@ impl<K, P> ProtocolInfoDeluxe<K, P> {
             share_info: ProtocolInfo {
                 share_count,
                 share_id,
+                leaker: Leaker::new(party_id.as_usize()),
             },
             round: 0,
         })

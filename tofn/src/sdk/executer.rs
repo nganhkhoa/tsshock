@@ -115,7 +115,6 @@ impl<T: Executer> ExecuterRaw for T {
         } else {
             p2ps_in
         };
-
         self.execute(info, bcasts_in_deserialized, p2ps_in)
     }
 

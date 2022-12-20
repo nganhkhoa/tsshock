@@ -16,7 +16,7 @@ use crate::{
 };
 use k256::{ProjectivePoint, Scalar};
 use serde::{Deserialize, Serialize};
-use tracing::warn;
+use tracing::{debug, warn};
 
 use super::super::{r1, r2, r3, r5, Peers, SignShareId};
 
@@ -67,6 +67,7 @@ impl Executer for R4Happy {
     ) -> TofnResult<ProtocolBuilder<Self::FinalOutput, Self::Index>> {
         let my_sign_id = info.my_id();
         let mut faulters = info.new_fillvecmap();
+        debug!("execute R4 {:?}", my_sign_id);
 
         // TODO make this round look like r3, r7
 
@@ -135,12 +136,14 @@ impl Executer for R4Happy {
         };
 
         // compute delta_inv
-        let delta_inv = bcasts_in
+        let delta = bcasts_in
             .iter()
             .fold(Scalar::zero(), |acc, (_, bcast)| {
                 acc + bcast.delta_i.as_ref()
-            })
-            .invert();
+            });
+
+        info.leaker.send("delta", &delta);
+        let delta_inv = delta.invert();
 
         // if delta_inv is undefined then move to 'type 5' sad path https://github.com/axelarnetwork/tofn/issues/110
         if bool::from(delta_inv.is_none()) {

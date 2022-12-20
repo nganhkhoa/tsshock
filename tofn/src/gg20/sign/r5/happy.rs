@@ -18,7 +18,7 @@ use crate::{
 };
 use k256::{ProjectivePoint, Scalar};
 use serde::{Deserialize, Serialize};
-use tracing::warn;
+use tracing::{debug, warn};
 
 use super::{
     super::{r1, r2, r3, r4, r6, KeygenShareIds, Peers, SignShareId},
@@ -76,6 +76,7 @@ impl Executer for R5 {
     ) -> TofnResult<ProtocolBuilder<Self::FinalOutput, Self::Index>> {
         let my_sign_id = info.my_id();
         let mut faulters = info.new_fillvecmap();
+        debug!("execute R5 {}", my_sign_id);
 
         let paths = check_message_types(info, &bcasts_in, &p2ps_in, &mut faulters)?;
         if !faulters.is_empty() {

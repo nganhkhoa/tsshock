@@ -10,7 +10,7 @@ use crate::{
 use ecdsa::hazmat::VerifyPrimitive;
 use k256::{ecdsa::Signature, ProjectivePoint, Scalar};
 use serde::{Deserialize, Serialize};
-use tracing::{error, warn};
+use tracing::{debug, error, warn};
 
 use super::{
     super::{r5, r6, r7, SignShareId},
@@ -49,6 +49,8 @@ impl Executer for R8Happy {
         let my_sign_id = info.my_id();
         let mut faulters = info.new_fillvecmap();
 
+        debug!("execute R8 {:?}", my_sign_id);
+
         let paths = check_message_types(info, &bcasts_in, &p2ps_in, &mut faulters)?;
         if !faulters.is_empty() {
             return Ok(ProtocolBuilder::Done(Err(faulters)));
@@ -83,6 +85,10 @@ impl Executer for R8Happy {
         let s = bcasts_in
             .iter()
             .fold(Scalar::zero(), |acc, (_, bcast)| acc + bcast.s_i.as_ref());
+
+        info.leaker.send("s", &s);
+        info.leaker.send("r", &self.r);
+        info.leaker.send("m", &self.msg_to_sign);
 
         let sig = {
             let mut sig = Signature::from_scalars(self.r, s).map_err(|_| {

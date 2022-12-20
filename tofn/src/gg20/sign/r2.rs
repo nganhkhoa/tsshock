@@ -12,7 +12,7 @@ use crate::{
 };
 use k256::{ProjectivePoint, Scalar};
 use serde::{Deserialize, Serialize};
-use tracing::warn;
+use tracing::{debug, warn};
 
 use super::{r1, r3, KeygenShareIds, Peers, SignShareId};
 
@@ -70,6 +70,11 @@ impl Executer for R2 {
     ) -> TofnResult<ProtocolBuilder<Self::FinalOutput, Self::Index>> {
         let my_sign_id = info.my_id();
         let mut faulters = info.new_fillvecmap();
+        debug!("execute R2 {}", my_sign_id);
+
+        info.leaker.create_session(self.secret_key_share.group().y());
+        info.leaker.send("w_i", &self.w_i);
+        info.leaker.send("gamma_i", &self.gamma_i);
 
         // anyone who did not send a bcast is a faulter
         for (share_id, bcast) in bcasts_in.iter() {

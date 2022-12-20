@@ -4,7 +4,7 @@ pub use super::executer::{
 };
 pub use super::protocol::new_protocol;
 pub use super::protocol_builder::{ProtocolBuilder, ProtocolBuilderOutput, RoundBuilder};
-pub use super::protocol_info::ProtocolInfo;
+pub use super::protocol_info::{ProtocolInfo, Leaker};
 pub use super::wire_bytes::{decode, deserialize, encode, serialize};
 
 mod utils {

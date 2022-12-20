@@ -13,7 +13,7 @@ use crate::{
 };
 use k256::{ProjectivePoint, Scalar};
 use serde::{Deserialize, Serialize};
-use tracing::warn;
+use tracing::{debug, warn};
 
 use super::{
     r1, r2, r3, r4, r5, r7,
@@ -86,6 +86,7 @@ impl Executer for R6 {
     ) -> TofnResult<ProtocolBuilder<Self::FinalOutput, Self::Index>> {
         let my_sign_id = info.my_id();
         let mut faulters = info.new_fillvecmap();
+        debug!("execute R6 {}", my_sign_id);
 
         // anyone who did not send a bcast is a faulter
         for (peer_sign_id, bcast) in bcasts_in.iter() {

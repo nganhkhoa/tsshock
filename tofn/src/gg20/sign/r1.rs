@@ -11,6 +11,8 @@ use ecdsa::elliptic_curve::Field;
 use k256::Scalar;
 use serde::{Deserialize, Serialize};
 
+use tracing::debug;
+
 use super::{r2, KeygenShareIds, SignProtocolBuilder, SignShareId};
 
 #[cfg(feature = "malicious")]
@@ -39,6 +41,7 @@ pub(super) fn start(
     // `HoleVecMap` has limited options for construction,
     // so we store a separate `peer_keygen_ids` to generate future `HoleVecMap`s.
     let (peer_keygen_ids, my_keygen_id) = all_keygen_ids.clone().puncture_hole(my_sign_id)?;
+    debug!("execute R1 {}", my_sign_id);
 
     let lambda_i_S = &vss::lagrange_coefficient(
         my_sign_id.as_usize(),

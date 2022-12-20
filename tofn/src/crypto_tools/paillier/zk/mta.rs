@@ -38,7 +38,7 @@ pub struct Witness<'a> {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Proof {
-    z: BigNumber,
+    pub z: BigNumber,
     z_prime: BigNumber,
     t: BigNumber,
     v: BigNumber,
@@ -58,7 +58,7 @@ pub struct StatementWc<'a> {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ProofWc {
-    proof: Proof,
+    pub proof: Proof,
     u: k256_serde::ProjectivePoint,
 }
 

@@ -22,7 +22,7 @@ use crate::{
 };
 use ecdsa::elliptic_curve::sec1::ToEncodedPoint;
 use k256::{ProjectivePoint, Scalar};
-use tracing::{error, warn};
+use tracing::{debug, error, warn};
 
 use super::super::{r1, r2, r3, r5, r6, r8, Peers};
 
@@ -65,6 +65,7 @@ impl Executer for R7Happy {
     ) -> TofnResult<ProtocolBuilder<Self::FinalOutput, Self::Index>> {
         let my_sign_id = info.my_id();
         let mut faulters = info.new_fillvecmap();
+        debug!("execute R7 {}", my_sign_id);
 
         let paths = check_message_types(info, &bcasts_in, &p2ps_in, &mut faulters)?;
         if !faulters.is_empty() {

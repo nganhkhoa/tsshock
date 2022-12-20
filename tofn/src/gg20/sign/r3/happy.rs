@@ -18,7 +18,7 @@ use crate::{
 };
 use k256::{ProjectivePoint, Scalar};
 use serde::{Deserialize, Serialize};
-use tracing::warn;
+use tracing::{debug, warn};
 
 use super::super::{r1, r2, Peers, SignShareId};
 
@@ -82,6 +82,7 @@ impl Executer for R3Happy {
     ) -> TofnResult<ProtocolBuilder<Self::FinalOutput, Self::Index>> {
         let my_sign_id = info.my_id();
         let mut faulters = info.new_fillvecmap();
+        debug!("execute R3 {:?}", my_sign_id);
 
         let paths = check_message_types(info, &bcasts_in, &p2ps_in, &mut faulters)?;
         if !faulters.is_empty() {
@@ -187,6 +188,12 @@ impl Executer for R3Happy {
                         );
                         return Ok(Accusation::MtAwc);
                     }
+
+                    debug!("h1_pow_w_j {}", p2p_in.mu_proof.proof.z);
+                    debug!("h1_pow_gamma_j {}", p2p_in.alpha_proof.z);
+
+                    info.leaker.send_bn("h1_pow_w_j", &p2p_in.mu_proof.proof.z);
+                    info.leaker.send_bn("h1_pow_gamma_j", &p2p_in.alpha_proof.z);
 
                     Ok(Accusation::None)
                 })?;
