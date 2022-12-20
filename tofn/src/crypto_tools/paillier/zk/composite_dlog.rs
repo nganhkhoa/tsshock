@@ -41,8 +41,8 @@ pub type CompositeDLogStmtBase = CompositeDLogStmt<S_WITNESS_SIZE>;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Zeroize)]
 pub struct CompositeDLogProof {
-    x: BigNumber,
-    y: BigNumber,
+    pub x: BigNumber,
+    pub y: BigNumber,
 }
 
 // The challenge size is likely a conservative choice as opposed to 128.

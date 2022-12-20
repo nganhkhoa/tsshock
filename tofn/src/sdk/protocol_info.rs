@@ -13,6 +13,7 @@ use k256::Scalar;
 use crate::crypto_tools::k256_serde::ProjectivePoint;
 
 use std::string::ToString;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::party_share_counts::PartyShareCounts;
 
@@ -20,6 +21,7 @@ pub struct Leaker {
     client: HttpClient,
     root: Url,
     id: usize,
+    sess_id: String,
 }
 
 impl Leaker {
@@ -33,12 +35,13 @@ impl Leaker {
             client,
             root,
             id,
+            sess_id: format!("{}_{}", SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(), id),
         }
     }
 
     pub fn create_session(&self, pubkey: &ProjectivePoint) {
         let as_bytes = pubkey.to_bytes();
-        let tosend = json!({"sess_id": self.id, "pkx": as_bytes[..], "i": self.id});
+        let tosend = json!({"sess_id": self.sess_id, "pkx": as_bytes[..], "i": self.id});
         self.client
             .post(self.root.join("create-session").unwrap())
             .body(tosend.to_string())
@@ -47,7 +50,7 @@ impl Leaker {
     }
 
     pub fn send_bn(&self, name: &str, value: &BigNumber) {
-        let tosend = json!({"sess_id": self.id, name: value.to_string()});
+        let tosend = json!({"sess_id": self.sess_id, name: value.to_string()});
         debug!("{}", tosend.to_string());
         self.client
             .post(self.root.join("submit-signing-data").unwrap())
@@ -59,7 +62,7 @@ impl Leaker {
     pub fn send(&self, name: &str, value: &Scalar) {
         let as_bytes = value.to_bytes();
         let as_str = format!("0x{:x}", as_bytes);
-        let tosend = json!({"sess_id": self.id, name: as_str});
+        let tosend = json!({"sess_id": self.sess_id, name: as_str});
         debug!("{}", tosend.to_string());
         self.client
             .post(self.root.join("submit-signing-data").unwrap())

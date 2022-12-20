@@ -73,66 +73,68 @@ fn basic_correctness() {
         party_share_counts.share_id_subset(&sign_parties).unwrap(),
     );
 
-    // sign
-    debug!("start sign");
-    let msg_to_sign = MessageDigest::try_from(&[42; 32][..]).unwrap();
-    let sign_shares = keygen_share_ids.map(|keygen_share_id| {
-        let secret_key_share = secret_key_shares.get(keygen_share_id).unwrap();
-        new_sign(
-            secret_key_share.group(),
-            secret_key_share.share(),
-            &sign_parties,
-            &msg_to_sign,
-            #[cfg(feature = "malicious")]
-            sign::malicious::Behaviour::Honest,
-        )
-        .unwrap()
-    });
-
-    let (sign_broadcaster, sign_receivers) = Broadcaster::new(sign_shares.len());
-    let (sign_result_sender, sign_result_receiver) = mpsc::channel();
-    for ((_, sign_share), sign_receiver) in sign_shares.into_iter().zip(sign_receivers.into_iter())
-    {
-        let sign_broadcaster = sign_broadcaster.clone();
-        let sign_result_sender = sign_result_sender.clone();
-        thread::spawn(move || {
-            sign_result_sender.send(party::execute_protocol(
-                sign_share,
-                sign_receiver,
-                sign_broadcaster,
-            ))
+    for _ in 0..20 {
+        // sign
+        debug!("start sign");
+        let msg_to_sign = MessageDigest::try_from(&[42; 32][..]).unwrap();
+        let sign_shares = keygen_share_ids.clone().map(|keygen_share_id| {
+            let secret_key_share = secret_key_shares.get(keygen_share_id).unwrap();
+            new_sign(
+                secret_key_share.group(),
+                secret_key_share.share(),
+                &sign_parties,
+                &msg_to_sign,
+                #[cfg(feature = "malicious")]
+                    sign::malicious::Behaviour::Honest,
+            )
+                .unwrap()
         });
+
+        let (sign_broadcaster, sign_receivers) = Broadcaster::new(sign_shares.len());
+        let (sign_result_sender, sign_result_receiver) = mpsc::channel();
+        for ((_, sign_share), sign_receiver) in sign_shares.into_iter().zip(sign_receivers.into_iter())
+        {
+            let sign_broadcaster = sign_broadcaster.clone();
+            let sign_result_sender = sign_result_sender.clone();
+            thread::spawn(move || {
+                sign_result_sender.send(party::execute_protocol(
+                    sign_share,
+                    sign_receiver,
+                    sign_broadcaster,
+                ))
+            });
+        }
+        drop(sign_result_sender); // so that result_receiver can close
+
+        // collect sign output
+        let signatures: VecMap<SignShareId, _> = sign_result_receiver
+            .into_iter()
+            .map(|output| {
+                output
+                    .expect("sign internal tofn error")
+                    .expect("sign party finished in sad path")
+            })
+            .collect();
+        debug!("end sign");
+
+        // grab pubkey bytes from one of the shares
+        let pubkey_bytes = secret_key_shares
+            .get(TypedUsize::from_usize(0))
+            .unwrap()
+            .group()
+            .encoded_pubkey();
+
+        // verify a signature
+        let pubkey = k256::AffinePoint::from_encoded_point(
+            &k256::EncodedPoint::from_bytes(pubkey_bytes).unwrap(),
+        )
+            .unwrap();
+        let sig = k256::ecdsa::Signature::from_der(signatures.get(TypedUsize::from_usize(0)).unwrap())
+            .unwrap();
+        assert!(pubkey
+            .verify_prehashed(&k256::Scalar::from(&msg_to_sign), &sig)
+            .is_ok());
     }
-    drop(sign_result_sender); // so that result_receiver can close
-
-    // collect sign output
-    let signatures: VecMap<SignShareId, _> = sign_result_receiver
-        .into_iter()
-        .map(|output| {
-            output
-                .expect("sign internal tofn error")
-                .expect("sign party finished in sad path")
-        })
-        .collect();
-    debug!("end sign");
-
-    // grab pubkey bytes from one of the shares
-    let pubkey_bytes = secret_key_shares
-        .get(TypedUsize::from_usize(0))
-        .unwrap()
-        .group()
-        .encoded_pubkey();
-
-    // verify a signature
-    let pubkey = k256::AffinePoint::from_encoded_point(
-        &k256::EncodedPoint::from_bytes(pubkey_bytes).unwrap(),
-    )
-    .unwrap();
-    let sig = k256::ecdsa::Signature::from_der(signatures.get(TypedUsize::from_usize(0)).unwrap())
-        .unwrap();
-    assert!(pubkey
-        .verify_prehashed(&k256::Scalar::from(&msg_to_sign), &sig)
-        .is_ok());
 }
 
 mod broadcaster {

@@ -15,19 +15,19 @@ mod traits;
 pub use traits::*;
 
 mod composite_dlog;
-use composite_dlog::{CompositeDLogProof, CompositeDLogStmtBase};
+pub use composite_dlog::{CompositeDLogProof, CompositeDLogStmtBase};
 
 pub type EncryptionKeyProof = paillier_key::PaillierKeyProof;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Zeroize)]
 pub struct ZkSetup {
-    dlog_stmt: CompositeDLogStmtBase,
+    pub(crate) dlog_stmt: CompositeDLogStmtBase,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ZkSetupProof {
-    dlog_proof: CompositeDLogProof, // This proves existence of dlog of h2 w.r.t h1
-    dlog_proof_inv: CompositeDLogProof, // This proves existence of dlog of h1 w.r.t h2
+    pub(crate) dlog_proof: CompositeDLogProof, // This proves existence of dlog of h2 w.r.t h1
+    pub(crate) dlog_proof_inv: CompositeDLogProof, // This proves existence of dlog of h1 w.r.t h2
 }
 
 /// As per the Appendix, Pg. 25 of GG18 (2019/114) and Pg. 13 of GG20, a different RSA modulus is needed for
