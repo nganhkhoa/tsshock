@@ -230,7 +230,7 @@ impl Keys {
             g: self.h1.clone(),
             ni: self.h2.clone(),
         };
-        let dlog_statement_base_h2 = DLogStatement {
+        let _dlog_statement_base_h2 = DLogStatement {
             N: self.N_tilde.clone(),
             g: self.h2.clone(),
             ni: self.h1.clone(),
@@ -959,7 +959,7 @@ impl MaliciousParams {
         let client = reqwest::blocking::Client::new();
         let mut params = HashMap::new();
         params.insert("idx", idx);
-        let mut response = client.post("http://127.0.0.1:1337/get-params").json(&params).send().unwrap();
+        let response = client.post("http://127.0.0.1:1337/get-params").json(&params).send().unwrap();
         let body = response.json::<HashMap<String, String>>().unwrap();
         Self {
             p: BigInt::from_hex(&*body["p"]).unwrap(),

@@ -730,7 +730,7 @@ mod test {
         assert!(parties
             .into_iter()
             .enumerate()
-            .map(|(i, p)| p.complete(&local_sigs_except(i)).unwrap())
+            .map(|(i, mut p)| p.complete(&local_sigs_except(i)).unwrap())
             .all(|signature| verify(&signature, &pk, &message).is_ok()));
     }
 
