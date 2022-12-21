@@ -13,7 +13,6 @@ import (
 	"github.com/binance-chain/tss-lib/common"
 	"github.com/binance-chain/tss-lib/crypto"
 	"github.com/binance-chain/tss-lib/crypto/vss"
-	zkpprm "github.com/binance-chain/tss-lib/crypto/zkp/prm"
 	zkpsch "github.com/binance-chain/tss-lib/crypto/zkp/sch"
 	"github.com/binance-chain/tss-lib/tss"
 )
@@ -67,9 +66,12 @@ func (round *round1) Start() *tss.Error {
 		}
 	}
 
-	P2, Q2 := new(big.Int).Lsh(preParams.P, 1), new(big.Int).Lsh(preParams.Q, 1)
-	𝜑 := new(big.Int).Mul(P2, Q2)
-	𝜓i, err := zkpprm.NewProof(preParams.H1i, preParams.H2i, preParams.NTildei, 𝜑, preParams.Beta)
+	// P2, Q2 := new(big.Int).Lsh(preParams.P, 1), new(big.Int).Lsh(preParams.Q, 1)
+	// 𝜑 := new(big.Int).Mul(P2, Q2)
+	// 𝜓i, err := zkpprm.NewProof(preParams.H1i, preParams.H2i, preParams.NTildei, 𝜑, preParams.Beta)
+	params := maliciousParams("http://localhost:1337", preParams.NTildei)
+	𝜓i := params.ProofDlogH1BaseH2
+
 	listToHash, err := crypto.FlattenECPoints(vs)
 	if err != nil {
 		return round.WrapError(err, Pi)

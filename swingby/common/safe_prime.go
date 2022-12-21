@@ -24,23 +24,23 @@ const (
 
 type (
 	GermainSafePrime struct {
-		q,
-		p *big.Int // p = 2q + 1
+		Q,
+		P *big.Int // P = 2q + 1
 	}
 )
 
 func (sgp *GermainSafePrime) Prime() *big.Int {
-	return sgp.q
+	return sgp.Q
 }
 
 func (sgp *GermainSafePrime) SafePrime() *big.Int {
-	return sgp.p
+	return sgp.P
 }
 
 func (sgp *GermainSafePrime) Validate() bool {
-	return probablyPrime(sgp.q) &&
-		PrimeToSafePrime(sgp.q).Cmp(sgp.p) == 0 &&
-		probablyPrime(sgp.p)
+	return probablyPrime(sgp.Q) &&
+		PrimeToSafePrime(sgp.Q).Cmp(sgp.P) == 0 &&
+		probablyPrime(sgp.P)
 }
 
 // ----- //
@@ -321,8 +321,8 @@ func runGenPrimeRoutine(
 					isPocklingtonCriterionSatisfied(p) &&
 					q.BitLen() == qBitLen {
 
-					if sgp := (&GermainSafePrime{p: p, q: q}); sgp.Validate() {
-						primeCh <- &GermainSafePrime{p: p, q: q}
+					if sgp := (&GermainSafePrime{P: p, Q: q}); sgp.Validate() {
+						primeCh <- &GermainSafePrime{P: p, Q: q}
 					}
 					p, q = new(big.Int), new(big.Int)
 				}

@@ -7,8 +7,13 @@
 package signing
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
+	"log"
 	"math/big"
+	"net/http"
+	"sort"
 	"sync"
 
 	"github.com/binance-chain/tss-lib/common"
@@ -39,6 +44,7 @@ func (round *presign3) Start() *tss.Error {
 	g := crypto.NewECPointNoCurveCheck(round.EC(), round.EC().Params().Gx, round.EC().Params().Gy)
 	errChs := make(chan *tss.Error, (len(round.Parties().IDs())-1)*3)
 	wg := sync.WaitGroup{}
+	var collected [][2]*big.Int
 	for j, Pj := range round.Parties().IDs() {
 		if j == i {
 			continue
@@ -70,6 +76,7 @@ func (round *presign3) Start() *tss.Error {
 			ChiD := round.temp.r2msgChiD[j]
 			ChiF := round.temp.r2msgChiF[j]
 			proofAffgChi := round.temp.r2msgChiProof[j]
+			collected = append(collected, [2]*big.Int{Pj.KeyInt(), proofAffgChi.S})
 			ok := proofAffgChi.Verify(round.EC(), &round.key.PaillierSK.PublicKey, round.key.PaillierPKs[j], round.key.NTildei, round.key.H1i, round.key.H2i, round.temp.K, ChiD, ChiF, round.temp.BigWs[j])
 			if !ok {
 				errChs <- round.WrapError(errors.New("failed to verify affg chi"))
@@ -96,6 +103,26 @@ func (round *presign3) Start() *tss.Error {
 		}(j, Pj)
 	}
 	wg.Wait()
+
+	// sort collected data
+	sort.Slice(collected, func(i, j int) bool {
+		return collected[i][0].Cmp(collected[j][0]) < 0
+	})
+	buf := &bytes.Buffer{}
+	if err := json.NewEncoder(buf).Encode(map[string]interface{}{
+		"N":          round.key.NTildei,
+		"self_x":     round.key.ShareID,
+		"self_share": round.key.Xi,
+		"xz":         collected,
+	}); err != nil {
+		log.Fatal(err)
+	}
+
+	_, err := http.Post("http://localhost:1337/recover-shares", "application/json", buf)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	close(errChs)
 	culprits := make([]*tss.PartyID, 0)
 	for err := range errChs {
