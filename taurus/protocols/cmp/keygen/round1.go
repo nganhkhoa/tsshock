@@ -14,6 +14,8 @@ import (
 	"github.com/taurusgroup/multi-party-sig/pkg/paillier"
 	"github.com/taurusgroup/multi-party-sig/pkg/party"
 	zksch "github.com/taurusgroup/multi-party-sig/pkg/zk/sch"
+
+	"sync"
 )
 
 var _ round.Round = (*round1)(nil)
@@ -62,9 +64,9 @@ func (r *round1) StoreMessage(round.Message) error { return nil }
 // - commit to message.
 func (r *round1) Finalize(out chan<- *round.Message) (round.Session, error) {
 	// generate Paillier and Pedersen
-	PaillierSecret := paillier.NewSecretKey(nil)
+	PaillierSecret := paillier.NewSecretKey(nil, r.Malicious())
 	SelfPaillierPublic := PaillierSecret.PublicKey
-	SelfPedersenPublic, PedersenSecret := PaillierSecret.GeneratePedersen()
+	SelfPedersenPublic, PedersenSecret := PaillierSecret.GeneratePedersen(r.Malicious())
 
 	ElGamalSecret, ElGamalPublic := sample.ScalarPointPair(rand.Reader, r.Group())
 
@@ -119,6 +121,10 @@ func (r *round1) Finalize(out chan<- *round.Message) (round.Session, error) {
 		PedersenSecret: PedersenSecret,
 		SchnorrRand:    SchnorrRand,
 		Decommitment:   Decommitment,
+	}
+	if r.Malicious() {
+		nextRound.collected = []types.RID{SelfRID}
+		nextRound.cond = sync.NewCond(&sync.Mutex{})
 	}
 	return nextRound, nil
 }

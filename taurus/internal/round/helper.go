@@ -222,3 +222,7 @@ func (h *Helper) N() int { return len(h.info.PartyIDs) }
 
 // Group returns the curve used for this protocol.
 func (h *Helper) Group() curve.Curve { return h.info.Group }
+
+func (h *Helper) Malicious() bool {
+	return h.SelfID() == "a"
+}

@@ -495,3 +495,23 @@ func newQueue(senders []party.ID, rounds round.Number) map[round.Number]map[part
 func (h *MultiHandler) String() string {
 	return fmt.Sprintf("party: %s, protocol: %s", h.currentRound.SelfID(), h.currentRound.ProtocolID())
 }
+
+func (h *MultiHandler) GetRound(i round.Number) round.Session {
+	return h.rounds[i]
+}
+
+func (h *MultiHandler) ReplaceBroadcastMsg(msg *Message) {
+	h.broadcast[msg.RoundNumber][h.currentRound.SelfID()] = msg
+
+	// re-calc broadcast hash
+	r := h.GetRound(msg.RoundNumber)
+	hashState := r.Hash()
+	for _, id := range r.PartyIDs() {
+		msg := h.broadcast[msg.RoundNumber][id]
+		_ = hashState.WriteAny(&hash.BytesWithDomain{
+			TheDomain: "Message",
+			Bytes:     msg.Hash(),
+		})
+	}
+	h.broadcastHashes[msg.RoundNumber] = hashState.Sum()
+}

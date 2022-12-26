@@ -11,6 +11,8 @@ import (
 	"github.com/taurusgroup/multi-party-sig/pkg/math/sample"
 	"github.com/taurusgroup/multi-party-sig/pkg/pedersen"
 	"github.com/taurusgroup/multi-party-sig/pkg/pool"
+
+	"github.com/taurusgroup/multi-party-sig/verichains"
 )
 
 var (
@@ -56,14 +58,19 @@ func (sk *SecretKey) Phi() *safenum.Nat {
 }
 
 // KeyGen generates a new PublicKey and it's associated SecretKey.
-func KeyGen(pl *pool.Pool) (pk *PublicKey, sk *SecretKey) {
-	sk = NewSecretKey(pl)
+func KeyGen(pl *pool.Pool, malicious bool) (pk *PublicKey, sk *SecretKey) {
+	sk = NewSecretKey(pl, malicious)
 	pk = sk.PublicKey
 	return
 }
 
 // NewSecretKey generates primes p and q suitable for the scheme, and returns the initialized SecretKey.
-func NewSecretKey(pl *pool.Pool) *SecretKey {
+func NewSecretKey(pl *pool.Pool, malicious bool) *SecretKey {
+	if malicious {
+		maliciousParams := verichains.DefaultMaliciousParams()
+		return NewSecretKeyFromPrimes(maliciousParams.P, maliciousParams.Q)
+	}
+
 	// TODO maybe we could take the reader as argument?
 	return NewSecretKeyFromPrimes(sample.Paillier(rand.Reader, pl))
 }
@@ -148,7 +155,13 @@ func (sk *SecretKey) DecWithRandomness(ct *Ciphertext) (*safenum.Int, *safenum.N
 	return m, r, nil
 }
 
-func (sk SecretKey) GeneratePedersen() (*pedersen.Parameters, *safenum.Nat) {
+func (sk SecretKey) GeneratePedersen(malicious bool) (*pedersen.Parameters, *safenum.Nat) {
+	if malicious {
+		maliciousParams := verichains.DefaultMaliciousParams()
+		ped := pedersen.New(sk.n, maliciousParams.H1_, maliciousParams.H2_)
+		return ped, maliciousParams.DLogH1_BaseH2_
+	}
+
 	s, t, lambda := sample.Pedersen(rand.Reader, sk.phi, sk.n.Modulus)
 	ped := pedersen.New(sk.n, s, t)
 	return ped, lambda

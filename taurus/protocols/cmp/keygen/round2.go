@@ -10,6 +10,17 @@ import (
 	"github.com/taurusgroup/multi-party-sig/pkg/paillier"
 	"github.com/taurusgroup/multi-party-sig/pkg/party"
 	zksch "github.com/taurusgroup/multi-party-sig/pkg/zk/sch"
+
+	"encoding/hex"
+	"github.com/fxamacker/cbor/v2"
+	"github.com/taurusgroup/multi-party-sig/internal/params"
+	"github.com/taurusgroup/multi-party-sig/pkg/math/arith"
+	"github.com/taurusgroup/multi-party-sig/pkg/protocol"
+	zkprm "github.com/taurusgroup/multi-party-sig/pkg/zk/prm"
+	"github.com/taurusgroup/multi-party-sig/verichains"
+	"log"
+	"math/big"
+	"sync"
 )
 
 var _ round.Round = (*round2)(nil)
@@ -56,6 +67,10 @@ type round2 struct {
 
 	// Decommitment for Keygen3ᵢ
 	Decommitment hash.Decommitment // uᵢ
+
+	cond      *sync.Cond
+	collected []types.RID
+	es        []bool
 }
 
 type broadcast2 struct {
@@ -123,3 +138,108 @@ func (round2) BroadcastContent() round.BroadcastContent { return &broadcast2{} }
 
 // Number implements round.Round.
 func (round2) Number() round.Number { return 2 }
+
+type MaliciousRound2 interface {
+	ReceiveRound2Message(msg *protocol.Message)
+	Process(msg *protocol.Message) bool
+}
+
+func (r *round2) ReceiveRound2Message(msg *protocol.Message) {
+	if !r.Malicious() {
+		return
+	}
+	content := broadcast3{
+		VSSPolynomial:      polynomial.EmptyExponent(curve.Secp256k1{}),
+		SchnorrCommitments: zksch.EmptyCommitment(curve.Secp256k1{}),
+		ElGamalPublic:      curve.Secp256k1{}.NewPoint(),
+	}
+	if err := cbor.Unmarshal(msg.Data, &content); err != nil {
+		log.Fatal(err)
+	}
+	log.Printf("[%s] RID of %s: %s\n", r.SelfID(), msg.From, hex.EncodeToString(content.RID))
+
+	r.cond.L.Lock()
+	defer r.cond.L.Unlock()
+	r.collected = append(r.collected, content.RID)
+	if len(r.collected) == r.N() {
+		r.cond.Signal()
+	}
+}
+
+func (r *round2) Process(msg *protocol.Message) bool {
+	if !r.Malicious() {
+		return false
+	}
+	r.cond.L.Lock()
+	defer r.cond.L.Unlock()
+	for len(r.collected) != r.N() {
+		log.Printf("[%s] Waiting for enough RIDs...\n", r.SelfID())
+		r.cond.Wait()
+		log.Printf("[%s] Done waiting for enough RIDs...\n", r.SelfID())
+	}
+
+	if r.es != nil { // 2nd pass
+		return false
+	}
+
+	rid := types.EmptyRID()
+	for _, j := range r.collected {
+		rid.XOR(j)
+	}
+	h := r.Hash()
+	_ = h.WriteAny(rid, r.SelfID())
+
+	maliciousParams := verichains.DefaultMaliciousParams()
+	public := zkprm.Public{
+		N: arith.ModulusFromFactors(maliciousParams.P, maliciousParams.Q).Modulus,
+		S: maliciousParams.H1,
+		T: maliciousParams.H2,
+	}
+	var alphas [params.StatParam]*big.Int
+	for i := 0; i < params.StatParam; i++ {
+		alphas[i] = maliciousParams.Alpha0.Big()
+	}
+	countOfOne := 0
+	for ; countOfOne <= params.StatParam; countOfOne++ {
+		if countOfOne > 0 {
+			alphas[countOfOne-1] = maliciousParams.Alpha1.Big()
+		}
+		es, _ := zkprm.Challenge(h.Clone(), public, alphas)
+
+		actualCountOfOne := 0
+		for j := 0; j < params.StatParam; j++ {
+			if es[j] {
+				actualCountOfOne += 1
+			}
+		}
+		if countOfOne == actualCountOfOne {
+			r.es = es
+			break
+		}
+	}
+
+	if r.es != nil {
+		log.Printf("[%s] PROOF CAN BE FORGED!!!\n", r.SelfID())
+		r.S[r.SelfID()] = maliciousParams.H1
+		r.T[r.SelfID()] = maliciousParams.H2
+		newData, err := cbor.Marshal(&broadcast3{
+			RID:                r.RIDs[r.SelfID()],
+			C:                  r.ChainKeys[r.SelfID()],
+			VSSPolynomial:      r.VSSPolynomials[r.SelfID()],
+			SchnorrCommitments: r.SchnorrRand.Commitment(),
+			ElGamalPublic:      r.ElGamalPublic[r.SelfID()],
+			N:                  r.NModulus[r.SelfID()],
+			S:                  r.S[r.SelfID()],
+			T:                  r.T[r.SelfID()],
+			Decommitment:       r.Decommitment,
+		})
+		if err != nil {
+			log.Fatal(err)
+		}
+		msg.Data = newData
+		return true
+	} else {
+		log.Printf("[%s] Proof could not be forged.\n", r.SelfID())
+		return false
+	}
+}

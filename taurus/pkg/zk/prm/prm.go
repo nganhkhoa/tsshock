@@ -59,7 +59,7 @@ func NewProof(private Private, hash *hash.Hash, public Public, pl *pool.Pool) *P
 		return nil
 	})
 
-	es, _ := challenge(hash, public, As)
+	es, _ := Challenge(hash, public, As)
 	// Modular addition is not expensive enough to warrant parallelizing
 	var Zs [params.StatParam]*big.Int
 	for i := 0; i < params.StatParam; i++ {
@@ -87,7 +87,7 @@ func (p *Proof) Verify(public Public, hash *hash.Hash, pl *pool.Pool) bool {
 
 	n, s, t := public.N.Big(), public.S.Big(), public.T.Big()
 
-	es, err := challenge(hash, public, p.As)
+	es, err := Challenge(hash, public, p.As)
 	if err != nil {
 		return false
 	}
@@ -129,7 +129,7 @@ func (p *Proof) Verify(public Public, hash *hash.Hash, pl *pool.Pool) bool {
 	return true
 }
 
-func challenge(hash *hash.Hash, public Public, A [params.StatParam]*big.Int) (es []bool, err error) {
+func Challenge(hash *hash.Hash, public Public, A [params.StatParam]*big.Int) (es []bool, err error) {
 	err = hash.WriteAny(public.N, public.S, public.T)
 	for _, a := range A {
 		_ = hash.WriteAny(a)

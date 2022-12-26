@@ -32,7 +32,7 @@ func GenerateConfig(group curve.Curve, N, T int, source io.Reader, pl *pool.Pool
 	}
 
 	for _, pid := range partyIDs {
-		paillierSecret := paillier.NewSecretKey(pl)
+		paillierSecret := paillier.NewSecretKey(pl, false)
 		s, t, _ := sample.Pedersen(source, paillierSecret.Phi(), paillierSecret.N())
 		pedersenPublic := pedersen.New(paillierSecret.Modulus(), s, t)
 		elGamalSecret := sample.Scalar(source, group)

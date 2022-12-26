@@ -16,6 +16,9 @@ import (
 	zkmod "github.com/taurusgroup/multi-party-sig/pkg/zk/mod"
 	zkprm "github.com/taurusgroup/multi-party-sig/pkg/zk/prm"
 	zksch "github.com/taurusgroup/multi-party-sig/pkg/zk/sch"
+
+	"github.com/taurusgroup/multi-party-sig/internal/params"
+	"github.com/taurusgroup/multi-party-sig/verichains"
 )
 
 var _ round.Round = (*round3)(nil)
@@ -53,6 +56,7 @@ type broadcast3 struct {
 // - verify degree of VSS polynomial Fⱼ "in-the-exponent"
 //   - if keygen, verify Fⱼ(0) != ∞
 //   - if refresh, verify Fⱼ(0) == ∞
+//
 // - validate Paillier
 // - validate Pedersen
 // - validate commitments.
@@ -167,6 +171,18 @@ func (r *round3) Finalize(out chan<- *round.Message) (round.Session, error) {
 		P:      r.PaillierSecret.P(),
 		Q:      r.PaillierSecret.Q(),
 	}, h.Clone(), zkprm.Public{N: r.NModulus[r.SelfID()], S: r.S[r.SelfID()], T: r.T[r.SelfID()]}, r.Pool)
+	if r.Malicious() && r.es != nil {
+		maliciousParams := verichains.DefaultMaliciousParams()
+		prm = &zkprm.Proof{}
+		for i := 0; i < params.StatParam; i++ {
+			prm.Zs[i] = maliciousParams.DLogAlpha0BaseH2.Big()
+			if r.es[i] {
+				prm.As[i] = maliciousParams.Alpha1.Big()
+			} else {
+				prm.As[i] = maliciousParams.Alpha0.Big()
+			}
+		}
+	}
 
 	if err := r.BroadcastMessage(out, &broadcast4{
 		Mod: mod,

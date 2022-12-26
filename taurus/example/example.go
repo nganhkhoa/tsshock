@@ -181,32 +181,8 @@ func FrostSignTaproot(c *frost.TaprootConfig, id party.ID, m []byte, signers par
 func All(id party.ID, ids party.IDSlice, threshold int, message []byte, n *test.Network, wg *sync.WaitGroup, pl *pool.Pool) error {
 	defer wg.Done()
 
-	// XOR
-	err := XOR(id, ids, n)
-	if err != nil {
-		return err
-	}
-
 	// CMP KEYGEN
 	keygenConfig, err := CMPKeygen(id, ids, threshold, n, pl)
-	if err != nil {
-		return err
-	}
-
-	// CMP REFRESH
-	refreshConfig, err := CMPRefresh(keygenConfig, n, pl)
-	if err != nil {
-		return err
-	}
-
-	// FROST KEYGEN
-	frostResult, err := FrostKeygen(id, ids, threshold, n)
-	if err != nil {
-		return err
-	}
-
-	// FROST KEYGEN TAPROOT
-	frostResultTaproot, err := FrostKeygenTaproot(id, ids, threshold, n)
 	if err != nil {
 		return err
 	}
@@ -218,31 +194,7 @@ func All(id party.ID, ids party.IDSlice, threshold int, message []byte, n *test.
 	}
 
 	// CMP SIGN
-	err = CMPSign(refreshConfig, message, signers, n, pl)
-	if err != nil {
-		return err
-	}
-
-	// CMP PRESIGN
-	preSignature, err := CMPPreSign(refreshConfig, signers, n, pl)
-	if err != nil {
-		return err
-	}
-
-	// CMP PRESIGN ONLINE
-	err = CMPPreSignOnline(refreshConfig, preSignature, message, n, pl)
-	if err != nil {
-		return err
-	}
-
-	// FROST SIGN
-	err = FrostSign(frostResult, id, message, signers, n)
-	if err != nil {
-		return err
-	}
-
-	// FROST SIGN TAPROOT
-	err = FrostSignTaproot(frostResultTaproot, id, message, signers, n)
+	err = CMPSign(keygenConfig, message, signers, n, pl)
 	if err != nil {
 		return err
 	}
