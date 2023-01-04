@@ -40,10 +40,10 @@ __device__ inline void endianSwap128(__uint128_t *x) {
   }
 }
 
-const int SHA512_MESSAGE_BLOCK_SIZE = 128;
+#define SHA512_MESSAGE_BLOCK_SIZE 128
 // const int SHA512_HASH_SIZE = 64;
-const int HASH_ARRAY_LEN = 8;
-const int HASH_RESULT_ARRAY_LEN = 4;
+#define HASH_ARRAY_LEN 8
+#define HASH_RESULT_ARRAY_LEN 4
 // const unsigned long long MAX_VAL = 0xFFFFFFFFFFFFFFFFLLU;
 
 // K: first 64 bits of the fractional parts of the cube roots of the first 80
@@ -653,7 +653,7 @@ extern "C" __global__ void brute(uint64_t *output, uint8_t *houtput,
                        176, 175, 170, 1,   130, 140, 32,  12,  197, 151, 237,
                        127, 248, 21,  169, 136, 246, 149, 106, 1,   0,   3};
 
-  uint64_t hash[4];
+  uint64_t hash[HASH_RESULT_ARRAY_LEN];
 
   BigNum::bigint_t<bits> x_mod_q = 1; // = x_in_q = pow(2, r, q)
 
