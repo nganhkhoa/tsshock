@@ -641,7 +641,7 @@ extern "C" __global__ void brute(uint64_t *output, uint8_t *houtput,
                                  uint64_t base, uint64_t kernel_batch_size) {
   uint64_t idx = blockIdx.x * blockDim.x + threadIdx.x;
 
-#define bits 2048
+#define bits 6000
   BigNum::bigint_t<bits> p(p_buf, p_len);
   BigNum::bigint_t<bits> q(q_buf, q_len);
   BigNum::bigint_t<bits> p_inv(p_inv_buf, p_inv_len);
