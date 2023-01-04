@@ -560,6 +560,27 @@ template <int BITS> struct bigint_t {
     res.trim();
   }
 
+  __device__ void plus_one() {
+    // quick add 1 to last bit if even
+    if (z[0] & 1 == 0) {
+      z[0] &= 1;
+      return;
+    }
+
+    for (int i = 0; i < zn; ++i) {
+      for (int b = 0; b < base_bits; b++) {
+        if (z[i] & (1 << b)) {
+        } else {
+          z[i] = ((z[i] >> b) | 1) << b;
+          return;
+        }
+      }
+
+      // this part is all 1, full conversion to 0
+      z[i] = 0;
+    }
+  }
+
   // __device__ inline bigint powmod(uint64_t n, const bigint &MOD) const {
   //     bigint res=1, mul=*this;
   //     while(n>0) {
@@ -691,7 +712,7 @@ extern "C" __global__ void brute(uint64_t *output, uint8_t *houtput,
     tmp = x;
     p.mul_simple(x, tmp);
 
-    tmp1 = x + one;
+    x.plus_one();
 
     uint64_t r = r_base + i;
     size_t new_len = 44;
