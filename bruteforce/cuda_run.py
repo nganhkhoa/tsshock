@@ -7,8 +7,101 @@ import sys
 
 from cuda import cuda, nvrtc, cudart
 
-# import cuda
-# print(dir(cuda))
+
+class SearchInstance:
+    def __init__(self, kernel, stream, kernel_batch_size, nblocks, nthreads, step):
+        self.kernel = kernel
+        self.stream = stream
+        self.kernel_batch_size = kernel_batch_size
+        self.nblocks = nblocks
+        self.nthreads = nthreads
+        self.step = step
+
+    def destroy(self):
+        err, = cuda.cuStreamDestroy(self.stream);
+        for mem in self.mems:
+            err, = cuda.cuMemFree(mem); CHK(err)
+
+    def set_args(self, p_buf, q_buf, p_inv_buf):
+        self.p_buf = p_buf
+        self.q_buf = q_buf
+        self.p_inv_buf = p_inv_buf
+
+    def search_next(self):
+        self.search(self.start + self.step)
+
+    def result(self):
+        stream = self.stream
+        d_output, d_houtput = self.outputs
+
+        output_data = np.zeros(1, dtype=np.uint64)
+        err, = cuda.cuMemcpyDtoHAsync(output_data, d_output, 8, stream); CHK(err)
+        houtput_data = np.zeros(32, dtype=np.uint8)
+        err, = cuda.cuMemcpyDtoHAsync(houtput_data, d_houtput, 32, stream); CHK(err)
+
+        err, = cuda.cuStreamSynchronize(stream)
+        CHK(err)
+
+        if output_data.any():
+            idx = np.argwhere(output_data != 0)[0][0]
+            ret = int(str(output_data[idx]))
+            return ret
+        return None
+
+    def completed(self):
+        status, = cuda.cuStreamQuery(self.stream)
+        return status == cuda.CUresult.CUDA_SUCCESS
+
+    def search(self, start):
+        stream = self.stream
+        kernel = self.kernel
+        kernel_batch_size = self.kernel_batch_size
+
+        p_buf = self.p_buf
+        q_buf = self.q_buf
+        p_inv_buf = self.p_inv_buf
+
+        self.start = start
+        print(f"searching from {start}")
+
+        err, d_output = cuda.cuMemAllocAsync(8, stream); CHK(err)
+        err, d_houtput = cuda.cuMemAllocAsync(32, stream); CHK(err)
+        err, d_p_buf = cuda.cuMemAllocAsync(len(p_buf), stream); CHK(err)
+        err, d_q_buf = cuda.cuMemAllocAsync(len(q_buf), stream); CHK(err)
+        err, d_p_inv_buf = cuda.cuMemAllocAsync(len(p_inv_buf), stream); CHK(err)
+
+        self.mems = [
+            d_output, d_houtput, d_p_buf, d_q_buf, d_p_inv_buf
+        ]
+        self.outputs = (d_output, d_houtput)
+
+        err, = cuda.cuMemcpyHtoDAsync(d_p_buf, p_buf, len(p_buf), stream); CHK(err)
+        err, = cuda.cuMemcpyHtoDAsync(d_q_buf, q_buf, len(q_buf), stream); CHK(err)
+        err, = cuda.cuMemcpyHtoDAsync(d_p_inv_buf, p_inv_buf, len(p_inv_buf), stream); CHK(err)
+
+        arg_values = (d_output, d_houtput,
+                      len(p_buf), d_p_buf,
+                      len(q_buf), d_q_buf,
+                      len(p_inv_buf), d_p_inv_buf,
+                      start,
+                      kernel_batch_size,
+                      )
+        arg_types =  (None,     None,
+                      ctypes.c_size_t, None,
+                      ctypes.c_size_t, None,
+                      ctypes.c_size_t, None,
+                      ctypes.c_uint64,
+                      ctypes.c_uint64,
+                      )
+
+        nblocks = self.nblocks
+        nthreads = self.nthreads
+        err, = cuda.cuLaunchKernel(kernel,
+                                nblocks, 1, 1,           # grid dim
+                                nthreads, 1, 1,          # block dim
+                                0, stream,                  # shared mem and stream
+                                (arg_values, arg_types), 0) # arguments
+        CHK(err)
 
 def CHK(err):
     if isinstance(err, cuda.CUresult):
@@ -103,12 +196,15 @@ def work(
     err, kernel = cuda.cuModuleGetFunction(module, b'brute'); CHK(err)
 
     # Test the kernel
-    NUM_THREADS = threads
 
     # err, numBlocksPerSm = cuda.cuOccupancyMaxActiveBlocksPerMultiprocessor(kernel, NUM_THREADS, 0); CHK(err)
     # print(f"numBlocksPerSm={numBlocksPerSm}")
 
+    NUM_THREADS = threads
     NUM_BLOCKS = blocks #props.multiProcessorCount
+
+    # NUM_THREADS = 4
+    # NUM_BLOCKS = 10
 
     step = NUM_BLOCKS*NUM_THREADS*kernel_batch_size
     time_start = time.time()
@@ -119,120 +215,44 @@ def work(
         nkernels = 1
     else:
         nkernels = int(sys.argv[1])
+
     streams = [cuda.cuStreamCreate(1)[1] for i in range(nkernels)]
+    streams = [
+        SearchInstance(kernel, s, kernel_batch_size, NUM_BLOCKS, NUM_THREADS, step * nkernels) for s in streams
+    ]
+    list(map(lambda s: s.set_args(p_buf, q_buf, p_inv_buf), streams))
 
     t = time.localtime()
     current_time = time.strftime("%H:%M:%S", t)
     print("start time:", current_time)
 
-    for range_start in range(0,max_r,step * nkernels):
-        outputs = []
-        mems = []
-        for i, stream in enumerate(streams):
-            base = range_start + i*step
-            print(f"Starting kernel from {base} with stream: {stream.getPtr()}")
+    # first iteration
+    for i, stream in enumerate(streams):
+        base = i*step
+        stream.search(base)
 
-            err, d_output = cuda.cuMemAllocAsync(8, stream); CHK(err)
-            err, d_houtput = cuda.cuMemAllocAsync(32, stream); CHK(err)
-            err, d_p_buf = cuda.cuMemAllocAsync(len(p_buf), stream); CHK(err)
-            err, d_q_buf = cuda.cuMemAllocAsync(len(q_buf), stream); CHK(err)
-            err, d_p_inv_buf = cuda.cuMemAllocAsync(len(p_inv_buf), stream); CHK(err)
+    print("waiting...")
 
-            mems += [
-                d_output, d_houtput, d_p_buf, d_q_buf, d_p_inv_buf
-            ]
-            outputs += [(d_output, d_houtput)]
+    found = None
 
-            err, = cuda.cuMemcpyHtoDAsync(d_p_buf, p_buf, len(p_buf), stream); CHK(err)
-            err, = cuda.cuMemcpyHtoDAsync(d_q_buf, q_buf, len(q_buf), stream); CHK(err)
-            err, = cuda.cuMemcpyHtoDAsync(d_p_inv_buf, p_inv_buf, len(p_inv_buf), stream); CHK(err)
-
-            arg_values = (d_output, d_houtput,
-                          len(p_buf), d_p_buf,
-                          len(q_buf), d_q_buf,
-                          len(p_inv_buf), d_p_inv_buf,
-                          base,
-                          kernel_batch_size,
-                          )
-            arg_types =  (None,     None,
-                          ctypes.c_size_t, None,
-                          ctypes.c_size_t, None,
-                          ctypes.c_size_t, None,
-                          ctypes.c_uint64,
-                          ctypes.c_uint64,
-                          )
-
-            err, = cuda.cuLaunchKernel(kernel,
-                                    NUM_BLOCKS, 1, 1,           # grid dim
-                                    NUM_THREADS, 1, 1,          # block dim
-                                    0, stream,                  # shared mem and stream
-                                    (arg_values, arg_types), 0) # arguments
-            CHK(err)
-
-        print("waiting...")
-
-        found = False
-        enqueue = streams
-        while len(enqueue) != 0 and not found:
-            new_queue = []
-            for i, stream in enumerate(enqueue):
-                status, = cuda.cuStreamQuery(stream)
-                if status == cuda.CUresult.CUDA_SUCCESS:
-                    print(f"stream {stream.getPtr()} complete")
-                    output_data = np.zeros(1, dtype=np.uint64)
-                    err, = cuda.cuMemcpyDtoHAsync(output_data, d_output, 8, stream); CHK(err)
-                    houtput_data = np.zeros(32, dtype=np.uint8)
-                    err, = cuda.cuMemcpyDtoHAsync(houtput_data, d_houtput, 32, stream); CHK(err)
-
-                    err, = cuda.cuStreamSynchronize(stream)
-                    CHK(err)
-
-                    if output_data.any():
-                        idx = np.argwhere(output_data != 0)[0][0]
-                        ret = int(str(output_data[idx]))
-                        print("Found! ", ret, bytes(houtput_data).hex())
-                        found = True
-                else:
-                    new_queue += [stream]
-            enqueue = new_queue
-            if found:
-                break
+    while True:
+        completed = list(filter(lambda s: s.completed(), streams))
+        if len(completed) == 0:
             time.sleep(2)
-
-        if found:
-            for stream in enqueue:
-                err, = cuda.cuStreamDestroy(stream); CHK(err)
-
-        # cudart.cudaDeviceSynchronize()
-        # found_values = []
-        # for ((d_output, houtput), stream) in zip(outputs, streams):
-        #     output_data = np.zeros(1, dtype=np.uint64)
-        #     err, = cuda.cuMemcpyDtoHAsync(output_data, d_output, 8, stream); CHK(err)
-
-        #     houtput_data = np.zeros(32, dtype=np.uint8)
-        #     err, = cuda.cuMemcpyDtoHAsync(houtput_data, d_houtput, 32, stream); CHK(err)
-
-        #     found_values += [output_data]
-
-        # cudart.cudaDeviceSynchronize()
-
-        # found = False
-        # for output_data in found_values:
-        #     print(output_data)
-        #     if output_data.any():
-        #         idx = np.argwhere(output_data != 0)[0][0]
-        #         ret = int(str(output_data[idx]))
-        #         print("Found! ", ret, [hex(x) for x in houtput_data])
-        #         found = True
-
-        for mem in mems:
-            err, = cuda.cuMemFree(mem); CHK(err)
-
-        if found:
-            break
+            continue
+        results = map(lambda s: s.result(), completed)
+        for result in results:
+            if result is not None:
+                found = result
+                break
+        else:
+            for stream in completed:
+                stream.search_next()
+            continue
+        break
 
     for stream in streams:
-        err, = cuda.cuStreamDestroy(stream);
+        stream.destroy()
 
     t = time.localtime()
     current_time = time.strftime("%H:%M:%S", t)
@@ -240,7 +260,7 @@ def work(
 
     err, = cuda.cuModuleUnload(module)
     err, = cuda.cuCtxDestroy(context)
-    return ret
+    return found
 
 if __name__=="__main__":
     main()
