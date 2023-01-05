@@ -229,12 +229,12 @@ uint64_t *getHash(uint64_t *retVal, PaddedMsg *p)
         for (int i = 0; i < HASH_ARRAY_LEN; ++i)
             h[i] += reg[i];
 
-        printf("// start of round %llu\n", i + 1);
-        printf("uint64_t h[8] = {\n");
-        #pragma unroll
-        for (int i = 0; i < HASH_ARRAY_LEN; ++i)
-            printf("    0x%016llx,\n", h[i]);
-        printf("};\n");
+        // printf("// start of round %llu\n", i + 1);
+        // printf("uint64_t h[8] = {\n");
+        // #pragma unroll
+        // for (int i = 0; i < HASH_ARRAY_LEN; ++i)
+        //     printf("    0x%016llx,\n", h[i]);
+        // printf("};\n");
     }
 
     if (GET_IV) {
