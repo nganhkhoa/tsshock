@@ -3,7 +3,6 @@ from Crypto.Util.number import isPrime
 
 from sympy import primerange, isprime, discrete_log, is_quad_residue, gcd
 from sympy.ntheory.modular import crt
-from cuda_run import work
 from typing import List, Tuple
 
 from ctypes import *
@@ -13,6 +12,10 @@ import random
 import time
 import os
 import subprocess
+
+
+from cuda_run import work
+
 
 SMALL_PRIMES = list(primerange(10 ** 3, 10 ** 4))
 SECP256K1_Q = 0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141
@@ -41,6 +44,7 @@ def _hash_ints(ints: List[int], log=False) -> int:
         hash_obj.update(buf)
         full_buf += len(buf).to_bytes(2, "little")
         full_buf += buf
+
     if log:
         full_buf = list(full_buf)
         extra = full_buf[128*4:]
@@ -146,41 +150,11 @@ def _gen_malicious_params():
     assert pow(h1, order, N) == 1
     assert pow(h2, order, N) == 1
 
-    # build proof for log(h2, base=h1)
-    # g, V = h2, h1
-    # secret = p - 1
-    # r = 222
-    # x = pow(g, r, N)
-    # c = _hash_ints([SALT, N, g, V, x])
-    # y = (r - c * secret) % phiN
-    # proof_dlog_h2_base_h1 = (y, c)
 
     g, V = h2, h1
     assert g % p == 1 and g % q == 2
     inv_p_mod_q = pow(p, -1, q)
 
-    # sample hash values
-    # _hash_ints([SALT, N, g, V], log=True)
-
-    # hash1 = _hash_ints([SALT, N, g, V, pow(g, r, N)])
-
-    r = 0
-    hash2 = _hash_ints([SALT, N, g, V, pow(2, r, q)], log=True)
-    print("r=", r, hex(hash2))
-
-    r = 1000
-    hash2 = _hash_ints([SALT, N, g, V, pow(2, r, q)], log=True)
-    print("r=", r, hex(hash2))
-
-    r = 10000
-    hash2 = _hash_ints([SALT, N, g, V, pow(2, r, q)], log=True)
-    print("r=", r, hex(hash2))
-
-    r = 100000
-    hash2 = _hash_ints([SALT, N, g, V, pow(2, r, q)], log=True)
-    print("r=", r, hex(hash2))
-
-    # exit(0)
     template = open("brute.template.cu", "r").read()
     template_modified = modify_template(template, [SALT, N, g, V])
     open("brute.cu", "w").write(template_modified)
