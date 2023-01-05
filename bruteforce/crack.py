@@ -6,9 +6,14 @@ from sympy.ntheory.modular import crt
 from cuda_run import work
 from typing import List, Tuple
 
+from ctypes import *
+
 import bisect
 import random
 import time
+import os
+import subprocess
+
 SMALL_PRIMES = list(primerange(10 ** 3, 10 ** 4))
 SECP256K1_Q = 0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141
 
@@ -55,6 +60,45 @@ def _hash_buffer(ints):
 def _int_buffer(x):
     return x.to_bytes((x.bit_length() + 7) // 8, "big")
 
+def get_hardcode_values(ints: List[int]) -> Tuple[List[int], int, List[int]]:
+    full_buf = b''
+    for x in ints:
+        buf = x.to_bytes((x.bit_length() + 7) // 8, "big")
+        full_buf += len(buf).to_bytes(2, "little")
+        full_buf += buf
+
+    sha512dll = os.getcwd() + "/sha512.dll"
+
+    subprocess.run(["clang++", "-o", sha512dll, "-shared", "sha512.cc"], shell=True)
+
+    sha512 = CDLL(sha512dll)
+    get_iv = getattr(sha512, "get_iv")
+    get_iv.argtypes = [POINTER(c_ubyte), c_size_t, c_ulonglong*8]
+
+    iv = (c_ulonglong * 8)()
+    l = len(full_buf)
+    c = (c_ubyte * l)(*full_buf)
+
+    get_iv(c, l, iv)
+    return (list(map(int, iv)), l, list(full_buf[l - l % 128:]))
+
+def modify_template(template: str, ints: List[int]) -> str:
+    iv, original_len, suffix = get_hardcode_values(ints)
+
+    custom_hash_iv = f"uint64_t h[8] = {{ {','.join(map(hex, iv))} }};"
+    suffix_raw_bytes = f"uint8_t hbuf[512] = {{ {','.join(map(str, suffix))} }};"
+
+    substitutions = [
+        ("ORIGINAL_PREFIX_LEN", str(original_len - len(suffix))),
+        ('SUFFIX_LEN', str(len(suffix))),
+        ('SUFFIX_RAW_BYTES', suffix_raw_bytes),
+        ('CUSTOM_HASH_IV', custom_hash_iv),
+    ]
+
+    for search, replacement in substitutions:
+        template = template.replace(search, replacement)
+
+    return template
 
 
 N_LENGTH = 2048
@@ -137,6 +181,9 @@ def _gen_malicious_params():
     print("r=", r, hex(hash2))
 
     # exit(0)
+    template = open("brute.template.cu", "r").read()
+    template_modified = modify_template(template, [SALT, N, g, V])
+    open("brute.cu", "w").write(template_modified)
 
     if True:
         r = work(
