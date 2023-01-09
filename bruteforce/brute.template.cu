@@ -550,6 +550,7 @@ template <int BITS> struct bigint_t {
     res.trim();
   }
 
+  // WARN: not implement overflow to another part
   __device__ void plus_one() {
     // quick add 1 to last bit if even
     if (z[0] & 1 == 0) {
@@ -568,6 +569,22 @@ template <int BITS> struct bigint_t {
 
       // this part is all 1, full conversion to 0
       z[i] = 0;
+    }
+  }
+
+  __device__ void mul_two() {
+    z[0] = z[0] << 1;
+    for (int i = 1; i < zn; ++i) {
+      z[i] = (z[i] << 1) | ((z[i - 1] >> base_bits) & 1);
+    }
+
+    // add another part, overflow
+    if ((z[zn - 1] >> base_bits) & 1) {
+      z[zn++] = 1;
+    }
+
+    for (int i = 0; i < zn; i++) {
+      z[i] &= ~(1 << base_bits);
     }
   }
 
@@ -723,8 +740,9 @@ extern "C" __global__ void brute(uint64_t *output, uint8_t *houtput,
     // if x_in_q > q:
     //     x_in_q -= q
 
-    tmp = x_mod_q;
-    two.mul_simple(x_mod_q, tmp);
+    /* tmp = x_mod_q;
+    two.mul_simple(x_mod_q, tmp); */
+    x_mod_q.mul_two();
     if (x_mod_q > q) {
       tmp = x_mod_q;
       tmp.mod(x_mod_q, q, tmp1, tmp2, tmp3);
