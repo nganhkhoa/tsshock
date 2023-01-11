@@ -71,9 +71,17 @@ def get_hardcode_values(ints: List[int]) -> Tuple[List[int], int, List[int]]:
         full_buf += len(buf).to_bytes(2, "little")
         full_buf += buf
 
-    sha512dll = os.getcwd() + "/sha512.dll"
-
-    subprocess.run(["clang++", "-o", sha512dll, "-shared", "sha512.cc"], shell=True)
+    if sys.platform == "win32":
+        endianess = "-DIS_LITTLE_ENDIAN=" + ("0", "1")[sys.byteorder == "little"]
+        sha512dll = os.getcwd() + "/sha512.dll"
+        subprocess.run(["clang++", "-o", sha512dll, "-shared", endianess, "sha512.cc"], shell=True)
+    elif sys.platform == "linux":
+        endianess = "-DIS_LITTLE_ENDIAN=" + ("0", "1")[sys.byteorder == "little"]
+        sha512dll = os.getcwd() + "/sha512.so"
+        subprocess.run(["clang++", "-o", sha512dll, "-shared", "-fPIC", endianess, "sha512.cc"], shell=False)
+    else:
+        print("urh, what platform are you on?")
+        exit()
 
     sha512 = CDLL(sha512dll)
     get_iv = getattr(sha512, "get_iv")

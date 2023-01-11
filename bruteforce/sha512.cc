@@ -188,7 +188,7 @@ uint64_t *getHash(uint64_t *retVal, PaddedMsg *p)
         0x0EB72DDC81C52CA2
     };
 
-#if MACHINE_BYTE_ORDER == LITTLE_ENDIAN
+#if IS_LITTLE_ENDIAN
     // Convert byte order of message to big endian
     uint64_t *msg = ((uint64_t*)&p->msg[0]);
     for (int i = 0; i < N * 16; ++i)
@@ -245,7 +245,7 @@ uint64_t *getHash(uint64_t *retVal, PaddedMsg *p)
 
     // Now the array h is the hash of the original message M
     memcpy(retVal, h, sizeof(uint64_t) * HASH_RESULT_ARRAY_LEN);
-    #if MACHINE_BYTE_ORDER == LITTLE_ENDIAN
+    #if IS_LITTLE_ENDIAN
         // Convert byte order of message to big endian
         uint64_t *retValPtr = retVal;
         #pragma unroll
@@ -269,7 +269,9 @@ void SHA512Hash(uint64_t* result, const uint8_t *input, size_t len, size_t origi
 
 // export and use in python, bruh
 extern "C"
+#ifdef _WIN32
 __declspec(dllexport)
+#endif
 void get_iv(uint8_t* content, size_t len, uint64_t* iv /* size 8 */) {
   GET_IV = true;
   SHA512Hash(iv, content, len - (len % 128), 0);
