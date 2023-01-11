@@ -27,7 +27,14 @@ class SearchInstance:
         self.q_buf = q_buf
         self.p_inv_buf = p_inv_buf
 
+    def report_time(self):
+        end = time.time()
+        elapsed = end - self.start_time
+        ops_per_sec = self.kernel_batch_size / elapsed
+        print(f"kernel search from [{self.start}] time elapsed {elapsed}s with {ops_per_sec} op/s")
+
     def search_next(self):
+        print(f"kernel search from [{self.start}] completed; continue search from {self.start + self.step}")
         self.search(self.start + self.step)
 
     def result(self):
@@ -62,22 +69,27 @@ class SearchInstance:
         p_inv_buf = self.p_inv_buf
 
         self.start = start
+        self.start_time = time.time()
         print(f"searching from {start}")
 
-        err, d_output = cuda.cuMemAllocAsync(8, stream); CHK(err)
-        err, d_houtput = cuda.cuMemAllocAsync(32, stream); CHK(err)
-        err, d_p_buf = cuda.cuMemAllocAsync(len(p_buf), stream); CHK(err)
-        err, d_q_buf = cuda.cuMemAllocAsync(len(q_buf), stream); CHK(err)
-        err, d_p_inv_buf = cuda.cuMemAllocAsync(len(p_inv_buf), stream); CHK(err)
+        if not hasattr(self, "mems"):
+            err, d_output = cuda.cuMemAllocAsync(8, stream); CHK(err)
+            err, d_houtput = cuda.cuMemAllocAsync(32, stream); CHK(err)
+            err, d_p_buf = cuda.cuMemAllocAsync(len(p_buf), stream); CHK(err)
+            err, d_q_buf = cuda.cuMemAllocAsync(len(q_buf), stream); CHK(err)
+            err, d_p_inv_buf = cuda.cuMemAllocAsync(len(p_inv_buf), stream); CHK(err)
 
-        self.mems = [
-            d_output, d_houtput, d_p_buf, d_q_buf, d_p_inv_buf
-        ]
+            err, = cuda.cuMemcpyHtoDAsync(d_p_buf, p_buf, len(p_buf), stream); CHK(err)
+            err, = cuda.cuMemcpyHtoDAsync(d_q_buf, q_buf, len(q_buf), stream); CHK(err)
+            err, = cuda.cuMemcpyHtoDAsync(d_p_inv_buf, p_inv_buf, len(p_inv_buf), stream); CHK(err)
+
+            self.mems = [
+                d_output, d_houtput, d_p_buf, d_q_buf, d_p_inv_buf
+            ]
+        else:
+            d_output, d_houtput, d_p_buf, d_q_buf, d_p_inv_buf = self.mems
+
         self.outputs = (d_output, d_houtput)
-
-        err, = cuda.cuMemcpyHtoDAsync(d_p_buf, p_buf, len(p_buf), stream); CHK(err)
-        err, = cuda.cuMemcpyHtoDAsync(d_q_buf, q_buf, len(q_buf), stream); CHK(err)
-        err, = cuda.cuMemcpyHtoDAsync(d_p_inv_buf, p_inv_buf, len(p_inv_buf), stream); CHK(err)
 
         arg_values = (d_output, d_houtput,
                       len(p_buf), d_p_buf,
@@ -120,10 +132,8 @@ def work(
     p_buf,
     q_buf,
     p_inv_buf,
+    args,
     max_r = 2**60,
-    threads = 4,
-    blocks = 64,
-    kernel_batch_size = 8
 ):
     # Init
     err, = cuda.cuInit(0); CHK(err)
@@ -132,7 +142,9 @@ def work(
     err, cuDevice = cuda.cuDeviceGet(0); CHK(err)
 
     err, name = cuda.cuDeviceGetName(128, cuDevice); CHK(err)
-    print(f"Cuda device: {name.strip()}")
+    name = name.replace(b'\x00', b'')
+    name = name.rstrip()
+    print(f"Cuda device: {name}")
 
     err, props = cudart.cudaGetDeviceProperties(cuDevice); CHK(err)
     for k in ['maxThreadsPerBlock', 'maxThreadsDim', 'maxGridSize', 'multiProcessorCount', 'major', 'minor', 'concurrentKernels']:
@@ -159,9 +171,11 @@ def work(
         # Compile program
         opts = [
             b'--fmad=false', arch_arg, b'--device-int128',
-            #b'-Xptxas=-suppress-stack-size-warning',
+            b'-Xptxas=-suppress-stack-size-warning',
             '--include-path={}'.format("/usr/local/cuda/include").encode('UTF-8'),
-            b'--std=c++11', b'-default-device'
+            b'--std=c++11',
+            b'-default-device',
+            b'--ptxas-options=-v',
         ]
         print("Compiling... may take a while...")
         comperr, = nvrtc.nvrtcCompileProgram(prog, len(opts), opts)
@@ -200,31 +214,30 @@ def work(
     # err, numBlocksPerSm = cuda.cuOccupancyMaxActiveBlocksPerMultiprocessor(kernel, NUM_THREADS, 0); CHK(err)
     # print(f"numBlocksPerSm={numBlocksPerSm}")
 
-    NUM_THREADS = threads
-    NUM_BLOCKS = blocks #props.multiProcessorCount
-
-    # NUM_THREADS = 4
-    # NUM_BLOCKS = 10
+    NUM_THREADS = args.threads
+    NUM_BLOCKS = args.blocks
+    kernel_batch_size = args.batch
 
     step = NUM_BLOCKS*NUM_THREADS*kernel_batch_size
     time_start = time.time()
 
-    if len(sys.argv) == 1:
-        print("no argument passed, default to using 1 kernel")
-        print("./program <nkernels:int>")
-        nkernels = 1
-    else:
-        nkernels = int(sys.argv[1])
+    nkernels = args.kernels
+
+    kernel_args = {
+        "kernel batch size": kernel_batch_size,
+        "nblocks": NUM_BLOCKS,
+        "nthreads": NUM_THREADS,
+        "step": step,
+    }
+    print("launching kernels with:")
+    for k, v in kernel_args.items():
+        print(">>", k, v)
 
     streams = [cuda.cuStreamCreate(1)[1] for i in range(nkernels)]
     streams = [
         SearchInstance(kernel, s, kernel_batch_size, NUM_BLOCKS, NUM_THREADS, step * nkernels) for s in streams
     ]
     list(map(lambda s: s.set_args(p_buf, q_buf, p_inv_buf), streams))
-
-    t = time.localtime()
-    current_time = time.strftime("%H:%M:%S", t)
-    print("start time:", current_time)
 
     # first iteration
     for i, stream in enumerate(streams):
@@ -235,28 +248,31 @@ def work(
 
     found = None
 
+    start_time = time.time()
     while True:
         completed = list(filter(lambda s: s.completed(), streams))
         if len(completed) == 0:
             time.sleep(2)
             continue
-        results = map(lambda s: s.result(), completed)
-        for result in results:
+        results = map(lambda s: (s, s.result()), completed)
+        for s, result in results:
             if result is not None:
+                s.report_time()
                 found = result
                 break
         else:
             for stream in completed:
+                stream.report_time()
                 stream.search_next()
             continue
         break
+    end_time = time.time()
+    elapsed = end_time - start_time
+    elapsed_min = elapsed / 60
+    print(f"searched time {elapsed}s ({elapsed_min}m)")
 
     for stream in streams:
         stream.destroy()
-
-    t = time.localtime()
-    current_time = time.strftime("%H:%M:%S", t)
-    print("end time:", current_time)
 
     err, = cuda.cuModuleUnload(module)
     err, = cuda.cuCtxDestroy(context)
