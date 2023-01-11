@@ -236,9 +236,9 @@ def main():
     parser.add_argument('--Pbit', type=int, required=False, help="Size of P")
     parser.add_argument('--Qbit', type=int, required=False, help="Size of Q")
     parser.add_argument('--threads', type=int, required=False, help="Number of threads per block (block dim), default to 256", default=256)
-    parser.add_argument('--blocks', type=int, required=False, help="Number of blocks per grid (grid dim), default to 64", default=64)
+    parser.add_argument('--blocks', type=int, required=False, help="Number of blocks per grid (grid dim), default to 64", default=2**16)
     parser.add_argument('--kernels', type=int, required=False, help="Number of concurrent kernels to used, default to 1", default=1)
-    parser.add_argument('--batch', type=int, required=False, help="Loop count of each threads, default 1000", default=1000)
+    parser.add_argument('--batch', type=int, required=False, help="Loop count of each threads, default 2^14", default=2**16)
     args = parser.parse_args()
 
     if args.p and args.q:

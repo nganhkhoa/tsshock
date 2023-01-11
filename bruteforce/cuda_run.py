@@ -246,9 +246,8 @@ def work(
 
     print("waiting...")
 
-    found = None
-
     start_time = time.time()
+    print("started on:", time.asctime(time.localtime()))
     while True:
         completed = list(filter(lambda s: s.completed(), streams))
         if len(completed) == 0:
