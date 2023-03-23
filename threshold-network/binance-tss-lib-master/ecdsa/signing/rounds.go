@@ -7,6 +7,9 @@
 package signing
 
 import (
+	"math/big"
+	"sync"
+
 	"github.com/bnb-chain/tss-lib/common"
 	"github.com/bnb-chain/tss-lib/ecdsa/keygen"
 	"github.com/bnb-chain/tss-lib/tss"
@@ -36,6 +39,8 @@ type (
 	}
 	round3 struct {
 		*round2
+		collected [][2]*big.Int
+		mtx       sync.Mutex
 	}
 	round4 struct {
 		*round3

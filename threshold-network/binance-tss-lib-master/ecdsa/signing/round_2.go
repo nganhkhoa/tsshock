@@ -8,6 +8,7 @@ package signing
 
 import (
 	"errors"
+	"math/big"
 	"sync"
 
 	errorspkg "github.com/pkg/errors"
@@ -137,5 +138,5 @@ func (round *round2) CanAccept(msg tss.ParsedMessage) bool {
 
 func (round *round2) NextRound() tss.Round {
 	round.started = false
-	return &round3{round}
+	return &round3{round2: round, collected: make([][2]*big.Int, 0)}
 }

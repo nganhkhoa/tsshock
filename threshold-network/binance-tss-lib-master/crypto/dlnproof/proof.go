@@ -23,8 +23,8 @@ const Iterations = 128
 
 type (
 	Proof struct {
-		Alpha,
-		T [Iterations]*big.Int
+		Alpha [Iterations]*big.Int `json:"alpha"`
+		T     [Iterations]*big.Int `json:"t"`
 	}
 )
 

