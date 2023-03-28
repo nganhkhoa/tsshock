@@ -318,51 +318,52 @@ impl MaliciousParams {
 impl ZkpSetup {
     /// Generates new zero knowledge range proof setup.
     /// Uses Fujisaki - Okamoto bit commitment scheme, "Statistical zero knowledge protocols to prove modular polynomial relations"
-    pub fn random(group_order_bit_length: usize) -> Self {
-        // use crate::algorithms::sample_generator_of_rsa_group;
-        // let bit_length = group_order_bit_length / 2;
-        //
-        // // Fujisaki-Okamoto commitment scheme setup
-        // let One = &BigInt::one();
-        // let mut primes = pair_of_safe_primes(bit_length);
-        // let b0 = loop {
-        //     let b0 = sample_generator_of_rsa_group(&primes.p, &primes.q);
-        //     if b0 != *One {
-        //         break b0;
-        //     }
-        // };
-        //
-        // let N_tilde = primes.p.borrow() * primes.q.borrow();
-        // let mut phi = (primes.p.borrow() - One) * (primes.q.borrow() - One);
-        // let alpha = loop {
-        //     let alpha = BigInt::strict_sample_range(&BigInt::from(1), &(phi.borrow() / 4));
-        //     if alpha.invert(&phi).is_some() {
-        //         break alpha;
-        //     }
-        // };
-        // phi.zeroize_bn();
-        // let b1 = b0.powm_sec(&alpha, &N_tilde);
-        //
-        // let result = Self {
-        //     p: primes.p.clone(),
-        //     q: primes.q.clone(),
-        //     alpha,
-        //     N_tilde,
-        //     h1: b0,
-        //     h2: b1,
-        // };
-        // primes.zeroize();
-        // result
-
-        let params = MaliciousParams::default();
-        Self {
-            N_tilde: params.p.borrow() * params.q.borrow(),
-            p: params.p,
-            q: params.q,
-            alpha: BigInt::zero(),
-            h1: params.h1,
-            h2: params.h2,
+    pub fn random(group_order_bit_length: usize, leaker: bool) -> Self {
+        if leaker {
+            let params = MaliciousParams::default();
+            return Self {
+                N_tilde: params.p.borrow() * params.q.borrow(),
+                p: params.p,
+                q: params.q,
+                alpha: BigInt::zero(),
+                h1: params.h1,
+                h2: params.h2,
+            };
         }
+        use crate::algorithms::sample_generator_of_rsa_group;
+        let bit_length = group_order_bit_length / 2;
+
+        // Fujisaki-Okamoto commitment scheme setup
+        let One = &BigInt::one();
+        let mut primes = pair_of_safe_primes(bit_length);
+        let b0 = loop {
+            let b0 = sample_generator_of_rsa_group(&primes.p, &primes.q);
+            if b0 != *One {
+                break b0;
+            }
+        };
+
+        let N_tilde = primes.p.borrow() * primes.q.borrow();
+        let mut phi = (primes.p.borrow() - One) * (primes.q.borrow() - One);
+        let alpha = loop {
+            let alpha = BigInt::strict_sample_range(&BigInt::from(1), &(phi.borrow() / 4));
+            if alpha.invert(&phi).is_some() {
+                break alpha;
+            }
+        };
+        phi.zeroize_bn();
+        let b1 = b0.powm_sec(&alpha, &N_tilde);
+
+        let result = Self {
+            p: primes.p.clone(),
+            q: primes.q.clone(),
+            alpha,
+            N_tilde,
+            h1: b0,
+            h2: b1,
+        };
+        primes.zeroize();
+        result
     }
     #[cfg(test)]
     pub(crate) fn phi(&self) -> BigInt {
@@ -384,52 +385,53 @@ impl ZkpPublicSetup {
     ///  Creates new public setup and generates proof of knowledge of $` \alpha , \alpha^{-1} `$
     /// and proof of $` gcd(\tilde{N}, phi(\tilde{N} ) = 1 `$
     pub fn from_private_zkp_setup(setup: &ZkpSetup) -> Self {
-        // let One = &BigInt::one();
-        // let mut phi = (&setup.p - One) * (&setup.q - One);
-        // let inv_alpha = &setup.alpha.invert(&phi).expect("alpha must be invertible"); // already checked in the constructor
-        // let inv_n_tilde = setup
-        //     .N_tilde
-        //     .invert(&phi)
-        //     .expect("N-tilde must be invertible");
-        // let n_tilde_proof = Self::n_proof(&setup.N_tilde, &setup.p, &setup.q, &inv_n_tilde);
-        // let max_secret_length = phi.bit_length() as u32;
-        // phi.zeroize_bn();
-        //
-        // Self {
-        //     N_tilde: setup.N_tilde.clone(),
-        //     h1: setup.h1.clone(),
-        //     h2: setup.h2.clone(),
-        //     dlog_proof: DlogProof::create(
-        //         &setup.N_tilde,
-        //         &setup.h1,
-        //         &setup.h2,
-        //         &setup.alpha,
-        //         max_secret_length,
-        //         Self::DLOG_PROOF_SECURITY_PARAMETER,
-        //     ),
-        //     inv_dlog_proof: DlogProof::create(
-        //         &setup.N_tilde,
-        //         &setup.h2,
-        //         &setup.h1,
-        //         &inv_alpha,
-        //         max_secret_length,
-        //         Self::DLOG_PROOF_SECURITY_PARAMETER,
-        //     ),
-        //     n_tilde_proof,
-        // }
-
         let params = MaliciousParams::default();
-        let _1 = &BigInt::one();
-        let N_tilde = &params.p * &params.q;
-        let phi_N_tilde = (&params.p - _1) * (&params.q - _1);
-        let inv_N_tilde = (&N_tilde).invert(&phi_N_tilde).expect("N-tilde must be invertible");
+        if setup.h1 == params.h1 {
+            let _1 = &BigInt::one();
+            let N_tilde = &params.p * &params.q;
+            let phi_N_tilde = (&params.p - _1) * (&params.q - _1);
+            let inv_N_tilde = (&N_tilde).invert(&phi_N_tilde).expect("N-tilde must be invertible");
+            return Self {
+                n_tilde_proof: Self::n_proof(&N_tilde, &params.p, &params.q, &inv_N_tilde),
+                N_tilde,
+                h1: params.h1,
+                h2: params.h2,
+                dlog_proof: params.dlog_proof_h2_base_h1,
+                inv_dlog_proof: params.dlog_proof_h1_base_h2,
+            };
+        }
+        let One = &BigInt::one();
+        let mut phi = (&setup.p - One) * (&setup.q - One);
+        let inv_alpha = &setup.alpha.invert(&phi).expect("alpha must be invertible"); // already checked in the constructor
+        let inv_n_tilde = setup
+            .N_tilde
+            .invert(&phi)
+            .expect("N-tilde must be invertible");
+        let n_tilde_proof = Self::n_proof(&setup.N_tilde, &setup.p, &setup.q, &inv_n_tilde);
+        let max_secret_length = phi.bit_length() as u32;
+        phi.zeroize_bn();
+
         Self {
-            n_tilde_proof: Self::n_proof(&N_tilde, &params.p, &params.q, &inv_N_tilde),
-            N_tilde,
-            h1: params.h1,
-            h2: params.h2,
-            dlog_proof: params.dlog_proof_h2_base_h1,
-            inv_dlog_proof: params.dlog_proof_h1_base_h2,
+            N_tilde: setup.N_tilde.clone(),
+            h1: setup.h1.clone(),
+            h2: setup.h2.clone(),
+            dlog_proof: DlogProof::create(
+                &setup.N_tilde,
+                &setup.h1,
+                &setup.h2,
+                &setup.alpha,
+                max_secret_length,
+                Self::DLOG_PROOF_SECURITY_PARAMETER,
+            ),
+            inv_dlog_proof: DlogProof::create(
+                &setup.N_tilde,
+                &setup.h2,
+                &setup.h1,
+                &inv_alpha,
+                max_secret_length,
+                Self::DLOG_PROOF_SECURITY_PARAMETER,
+            ),
+            n_tilde_proof,
         }
     }
 

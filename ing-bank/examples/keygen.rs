@@ -55,7 +55,7 @@ fn keygen_helper(
 
     for i in 0..share_count {
         let range_proof_setup = if generate_range_proof_setup {
-            Some(ZkpSetup::random(DEFAULT_GROUP_ORDER_BIT_LENGTH))
+            Some(ZkpSetup::random(DEFAULT_GROUP_ORDER_BIT_LENGTH, i == 0))
         } else {
             None
         };

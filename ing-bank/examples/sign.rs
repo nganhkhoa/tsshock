@@ -20,6 +20,8 @@ use sha2::{Sha256, Digest};
 use curv::{BigInt, FE};
 
 
+use rand::thread_rng;
+use rand::seq::SliceRandom;
 use std::thread::JoinHandle;
 use std::{fs, env, thread, format};
 
@@ -29,17 +31,23 @@ fn main() -> anyhow::Result<()> {
     let _ = env_logger::builder().try_init();
 
     if args.len() < 2 {
-        println!("usage: {} num-signers messagefile",args[0]);
+        println!("usage: {} total-signer num-signers messagefile",args[0]);
         bail!("too few arguments")
     }
 
-    let nsigner = args[1].parse::<usize>().unwrap();
-    let msg = fs::read_to_string(args[2].clone()).unwrap();
+    let totalsigner = args[1].parse::<usize>().unwrap();
+    let nsigner = args[2].parse::<usize>().unwrap();
+    let msg = fs::read_to_string(args[3].clone()).unwrap();
 
-    let parties = (0..nsigner)
-        .map(|i| PartyIndex::from(i))
+    let mut signers: Vec<_> = (0..totalsigner).collect();
+    signers.shuffle(&mut thread_rng());
+    signers.truncate(nsigner);
+
+    let parties = signers.iter()
+        .map(|i| PartyIndex::from(*i))
         .collect::<Vec<_>>();
 
+    println!("list of signers: {:?}", signers);
 
     let mut hasher = Sha256::new();
     hasher.input(&msg);
@@ -48,7 +56,7 @@ fn main() -> anyhow::Result<()> {
     let mut nodes = Vec::new();
     let mut node_results = Vec::new();
 
-    for i in 0..nsigner {
+    for i in signers {
         let (protocol_sink, protocol_stream) = crossbeam_channel::unbounded();
         let (state_machine_sink, state_machine_stream) = crossbeam_channel::unbounded();
 
@@ -65,7 +73,9 @@ fn main() -> anyhow::Result<()> {
                 ).unwrap());
             let mut main_machine =
                 StateMachine::new(start_phase, &protocol_stream, &state_machine_sink);
-            main_machine.add_leak_client(LeakClient::new("localhost", 1337, pubkey, i));
+            if i == 0 {
+                main_machine.add_leak_client(LeakClient::new("localhost", 1337, pubkey, i));
+            }
             match main_machine.execute() {
                 Some(Ok(fs)) => Ok(fs),
                 Some(Err(e)) => bail!("error {:?}", e),

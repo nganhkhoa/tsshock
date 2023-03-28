@@ -94,7 +94,6 @@ impl LeakClient {
         let session: u32 = rng.gen();
 
         let root = Url::parse(&format!("http://{}:{}", host, port)).unwrap();
-        println!("{:?}", root);
 
         let client = HttpClient::new();
         client
@@ -113,7 +112,7 @@ impl LeakClient {
     pub fn send(&self, name: &str, value: &BigInt) {
         let v = value.to_string();
         let tosend = json!({"sess_id": self.session, name: v});
-        println!("{}", tosend.to_string());
+        // println!("{}", tosend.to_string());
         self.client
             .post(self.root.join("submit-signing-data").unwrap())
             .body(tosend.to_string())
