@@ -1,0 +1,18 @@
+{
+  "contractName": "GasPriceOracleConsumer",
+  "abi": [
+    {
+      "constant": false,
+      "inputs": [],
+      "name": "refreshGasPrice",
+      "outputs": [],
+      "payable": false,
+      "stateMutability": "nonpayable",
+      "type": "function"
+    }
+  ],
+  "bytecode": "0x",
+  "deployedBytecode": "0x",
+  "linkReferences": {},
+  "deployedLinkReferences": {}
+}

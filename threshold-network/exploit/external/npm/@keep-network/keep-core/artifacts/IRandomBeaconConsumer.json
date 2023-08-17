@@ -1,0 +1,24 @@
+{
+  "contractName": "IRandomBeaconConsumer",
+  "abi": [
+    {
+      "constant": false,
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "relayEntry",
+          "type": "uint256"
+        }
+      ],
+      "name": "__beaconCallback",
+      "outputs": [],
+      "payable": false,
+      "stateMutability": "nonpayable",
+      "type": "function"
+    }
+  ],
+  "bytecode": "0x",
+  "deployedBytecode": "0x",
+  "linkReferences": {},
+  "deployedLinkReferences": {}
+}

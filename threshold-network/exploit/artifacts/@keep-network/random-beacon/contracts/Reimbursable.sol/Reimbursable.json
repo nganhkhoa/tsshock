@@ -1,0 +1,50 @@
+{
+  "_format": "hh-sol-artifact-1",
+  "contractName": "Reimbursable",
+  "sourceName": "@keep-network/random-beacon/contracts/Reimbursable.sol",
+  "abi": [
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": false,
+          "internalType": "address",
+          "name": "newReimbursementPool",
+          "type": "address"
+        }
+      ],
+      "name": "ReimbursementPoolUpdated",
+      "type": "event"
+    },
+    {
+      "inputs": [],
+      "name": "reimbursementPool",
+      "outputs": [
+        {
+          "internalType": "contract ReimbursementPool",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "contract ReimbursementPool",
+          "name": "_reimbursementPool",
+          "type": "address"
+        }
+      ],
+      "name": "updateReimbursementPool",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    }
+  ],
+  "bytecode": "0x",
+  "deployedBytecode": "0x",
+  "linkReferences": {},
+  "deployedLinkReferences": {}
+}
