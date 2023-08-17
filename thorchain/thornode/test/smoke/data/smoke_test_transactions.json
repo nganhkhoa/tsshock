@@ -1,0 +1,237 @@
+[
+  {
+    "chain": "BNB",
+    "from_address": "MASTER",
+    "to_address": "CONTRIB",
+    "memo": "SEED",
+    "coins": [
+      {
+        "asset": "BNB.BNB",
+        "amount": 1000000000000
+      }
+    ],
+    "gas": null,
+    "max_gas": null
+  },
+  {
+    "chain": "ETH",
+    "from_address": "MASTER",
+    "to_address": "PROVIDER-1",
+    "memo": "SEED",
+    "coins": [
+      {
+        "asset": "ETH.ETH",
+        "amount": 800000000000000000000
+      }
+    ],
+    "gas": null
+  },
+  {
+    "chain": "ETH",
+    "from_address": "MASTER",
+    "to_address": "PROVIDER-1",
+    "memo": "SEED",
+    "coins": [
+      {
+        "asset": "ETH.TKN-0X40BCD4DB8889A8BF0B1391D0C819DCD9627F9D0A",
+        "amount": 800000000000000000000000
+      }
+    ],
+    "gas": null
+  },
+  {
+    "chain": "ETH",
+    "from_address": "MASTER",
+    "to_address": "PROVIDER-1",
+    "memo": "SEED",
+    "coins": [
+      {
+        "asset": "ETH.USDT-0x3b7FA4dd21c6f9BA3ca375217EAD7CAb9D6bF483",
+        "amount": 800000000000000000000000
+      }
+    ],
+    "gas": null
+  },
+  {
+    "chain": "ETH",
+    "from_address": "MASTER",
+    "to_address": "PROVIDER-1",
+    "memo": "SEED",
+    "coins": [
+      {
+        "asset": "ETH.USDC-0x992193f66E8A3aF935B6dfeFfd1C42CBC76c2026",
+        "amount": 800000000000000000000000
+      }
+    ],
+    "gas": null
+  },
+  {
+    "chain": "THOR",
+    "from_address": "PROVIDER-1",
+    "to_address": "VAULT",
+    "memo": "ADD:BNB.BNB:PROVIDER-1",
+    "coins": [
+      {
+        "asset": "THOR.RUNE",
+        "amount": 100000000000
+      }
+    ],
+    "gas": null
+  },
+  {
+    "chain": "BNB",
+    "from_address": "PROVIDER-1",
+    "to_address": "VAULT",
+    "memo": "ADD:BNB.BNB:PROVIDER-1",
+    "coins": [
+      {
+        "asset": "BNB.BNB",
+        "amount": 250000000
+      }
+    ],
+    "gas": null
+  },
+  {
+    "chain": "THOR",
+    "from_address": "PROVIDER-1",
+    "to_address": "VAULT",
+    "memo": "ADD:ETH.ETH:PROVIDER-1",
+    "coins": [
+      {
+        "asset": "THOR.RUNE",
+        "amount": 50000000000
+      }
+    ],
+    "gas": null
+  },
+  {
+    "chain": "ETH",
+    "from_address": "PROVIDER-1",
+    "to_address": "VAULT",
+    "memo": "ADD:ETH.ETH:PROVIDER-1",
+    "coins": [
+      {
+        "asset": "ETH.ETH",
+        "amount": 400000000000000000000
+      }
+    ],
+    "gas": null
+  },
+  {
+    "chain": "THOR",
+    "from_address": "PROVIDER-1",
+    "to_address": "VAULT",
+    "memo": "ADD:ETH.USDT-0x3b7FA4dd21c6f9BA3ca375217EAD7CAb9D6bF483:PROVIDER-1",
+    "coins": [
+      {
+        "asset": "THOR.RUNE",
+        "amount": 50000000000
+      }
+    ],
+    "gas": null
+  },
+  {
+    "chain": "ETH",
+    "from_address": "PROVIDER-1",
+    "to_address": "VAULT",
+    "memo": "ADD:ETH.USDT-0x3b7FA4dd21c6f9BA3ca375217EAD7CAb9D6bF483:PROVIDER-1",
+    "coins": [
+      {
+        "asset": "ETH.USDT-0x3b7FA4dd21c6f9BA3ca375217EAD7CAb9D6bF483",
+        "amount": 60000000000000000000000
+      }
+    ],
+    "gas": null
+  },
+  {
+    "chain": "THOR",
+    "from_address": "PROVIDER-1",
+    "to_address": "VAULT",
+    "memo": "ADD:ETH.USDC-0x992193f66E8A3aF935B6dfeFfd1C42CBC76c2026:PROVIDER-1",
+    "coins": [
+      {
+        "asset": "THOR.RUNE",
+        "amount": 50000000000
+      }
+    ],
+    "gas": null
+  },
+  {
+    "chain": "ETH",
+    "from_address": "PROVIDER-1",
+    "to_address": "VAULT",
+    "memo": "ADD:ETH.USDC-0x992193f66E8A3aF935B6dfeFfd1C42CBC76c2026:PROVIDER-1",
+    "coins": [
+      {
+        "asset": "ETH.USDC-0x992193f66E8A3aF935B6dfeFfd1C42CBC76c2026",
+        "amount": 50000000000000000000000
+      }
+    ],
+    "gas": null
+  },
+  {
+    "chain": "THOR",
+    "from_address": "PROVIDER-1",
+    "to_address": "VAULT",
+    "memo": "ADD:ETH.TKN-0X40BCD4DB8889A8BF0B1391D0C819DCD9627F9D0A:PROVIDER-1",
+    "coins": [
+      {
+        "asset": "THOR.RUNE",
+        "amount": 50000000000
+      }
+    ],
+    "gas": null
+  },
+  {
+    "chain": "ETH",
+    "from_address": "PROVIDER-1",
+    "to_address": "VAULT",
+    "memo": "ADD:ETH.TKN-0X40BCD4DB8889A8BF0B1391D0C819DCD9627F9D0A:PROVIDER-1",
+    "coins": [
+      {
+        "asset": "ETH.TKN-0X40BCD4DB8889A8BF0B1391D0C819DCD9627F9D0A",
+        "amount": 30000000000000000000000
+      }
+    ],
+    "gas": null
+  },
+  {
+    "chain": "THOR",
+    "from_address": "PROVIDER-1",
+    "to_address": "VAULT",
+    "memo": "ADD:THOR.RUNE",
+    "coins": [
+      {
+        "asset": "THOR.RUNE",
+        "amount": 50000000000
+      }
+    ],
+    "gas": null
+  },
+  {
+    "chain": "THOR",
+    "from_address": "PROVIDER-1",
+    "to_address": "VAULT",
+    "memo": "ADD:BNB.BNB:PROVIDER-1",
+    "coins": [
+      {
+        "asset": "THOR.RUNE",
+        "amount": 30000000000
+      }
+    ],
+    "gas": null
+  },
+  {
+    "chain": "BNB",
+    "from_address": "PROVIDER-1",
+    "to_address": "VAULT",
+    "memo": "ADD:BNB.BNB:PROVIDER-1",
+    "coins": [
+      {
+        "asset": "BNB.BNB",
+        "amount": 120000000
+      }
+    ],
+    "gas": null
+  }
+]

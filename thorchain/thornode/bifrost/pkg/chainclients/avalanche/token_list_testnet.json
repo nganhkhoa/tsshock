@@ -1,0 +1,30 @@
+{
+  "name": "Avalanche Testnet Token List",
+  "logoURI": "",
+  "keywords": ["testnet"],
+  "tags": {},
+  "timestamp": "2022-05-31T00:00:00+00:00",
+  "tokens": [
+    {
+      "chainId": 4,
+      "address": "0x3b7FA4dd21c6f9BA3ca375217EAD7CAb9D6bF483",
+      "symbol": "TKN",
+      "name": "Test token",
+      "decimals": 18,
+      "tags": []
+    },
+    {
+      "chainId": 4,
+      "address": "0x333c3310824b7c685133F2BeDb2CA4b8b4DF633d",
+      "symbol": "TKN",
+      "name": "Test token",
+      "decimals": 18,
+      "tags": []
+    }
+  ],
+  "version": {
+    "major": 1,
+    "minor": 0,
+    "patch": 0
+  }
+}

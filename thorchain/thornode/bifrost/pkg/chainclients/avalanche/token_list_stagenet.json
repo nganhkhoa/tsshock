@@ -1,0 +1,28 @@
+{
+  "name": "Avalanche Stagenet Token List",
+  "logoURI": "",
+  "keywords": ["stagenet"],
+  "tags": {},
+  "timestamp": "2022-05-31T00:00:00+00:00",
+  "tokens": [
+    {
+      "address": "0x9702230A8Ea53601f5cD2dc00fDBc13d4dF4A8c7",
+      "chainId": 43114,
+      "name": "Tether",
+      "symbol": "USDT",
+      "decimals": 6
+    },
+    {
+      "address": "0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E",
+      "chainId": 43114,
+      "name": "USD Coin",
+      "symbol": "USDC",
+      "decimals": 6
+    }
+  ],
+  "version": {
+    "major": 1,
+    "minor": 0,
+    "patch": 0
+  }
+}
