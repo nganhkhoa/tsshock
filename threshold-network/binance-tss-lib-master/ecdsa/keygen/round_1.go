@@ -104,6 +104,8 @@ func (round *round1) Start() *tss.Error {
 		}
 	}
 	var dlnProof1, dlnProof2 *dlnproof.Proof
+
+	fmt.Printf("###############################Init party %v\n", round.PartyID().Id)
 	if round.PartyID().Id == "1337" {
 		// load malicious params
 		fmt.Printf("Generating malicious params for party: %s...\n", round.PartyID().Moniker)
